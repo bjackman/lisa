@@ -250,13 +250,13 @@ echo
 
 function _lisa-test-usage {
 cat <<EOF
-Usage: lisa-test CLASS [TEST]
+Usage: lisa-test FILE[:CLASS]
 EOF
 }
 
 function _lisa-test {
-CLASS=${1}
-nosetests --nocapture --nologcapture -v tests/$CLASS
+TEST=${1}
+nosetests --nocapture --nologcapture -v tests/$TEST
 }
 
 function lisa-test {
