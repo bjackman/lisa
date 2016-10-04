@@ -256,7 +256,7 @@ EOF
 
 function _lisa-test {
 CLASS=${1}
-nosetests -v tests/$CLASS
+nosetests --nocapture --nologcapture -v tests/$CLASS
 }
 
 function lisa-test {
