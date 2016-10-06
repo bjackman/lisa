@@ -54,6 +54,10 @@ class EasTest(LisaTest):
     def _experimentsInit(cls, *args, **kwargs):
         super(EasTest, cls)._experimentsInit(*args, **kwargs)
 
+        if SET_INITIAL_TASK_UTIL:
+            cls.target.write_value(
+                "/proc/sys/kernel/sched_initial_task_util", 1024)
+
         if SET_IS_BIG_LITTLE:
             try:
                 cls.target.write_value(
