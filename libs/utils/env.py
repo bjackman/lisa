@@ -30,6 +30,7 @@ import devlib
 from wlgen import RTA
 from energy import EnergyMeter
 from conf import JsonConf
+from energy_model import EnergyModel
 
 from devlib.utils.misc import memoized
 from trappy.stats.Topology import Topology
@@ -291,6 +292,8 @@ class TestEnv(ShareState):
         self.topology = Topology(clusters=CLUSTERS)
         logging.info(r'%14s - Topology:', 'Target')
         logging.info(r'%14s -    %s', 'Target', CLUSTERS)
+
+        self.nrg_model = EnergyModel(self.topology, self.target)
 
         # Initialize the platform descriptor
         self._init_platform()
@@ -605,8 +608,6 @@ class TestEnv(ShareState):
 
         # TODO: get the performance boundaries in case of intel_pstate driver
 
-        self.platform['cpus_count'] = len(self.target.core_clusters)
-
     def _load_em(self, board):
         em_path = os.path.join(basepath,
                 'libs/utils/platforms', board.lower() + '.json')
@@ -659,9 +660,6 @@ class TestEnv(ShareState):
         # Try to load the default energy model (if available)
         else:
             self.platform['nrg_model'] = self._load_em(self.conf['board'])
-
-        # Adding topology information
-        self.platform['topology'] = self.topology.get_level("cluster")
 
         logging.debug('%14s - Platform descriptor initialized\n%s',
             'Platform', self.platform)
