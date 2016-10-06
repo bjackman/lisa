@@ -292,6 +292,8 @@ class TestEnv(ShareState):
         logging.info(r'%14s - Topology:', 'Target')
         logging.info(r'%14s -    %s', 'Target', CLUSTERS)
 
+        # self.nrg_model = EnergyModel(self.topology, self.target)
+
         # Initialize the platform descriptor
         self._init_platform()
 
