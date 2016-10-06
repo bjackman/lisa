@@ -90,6 +90,86 @@ class EasTest(LisaTest):
                 rank=len(tasks)),
             msg="Not all the new generated tasks started on a big CPU")
 
+class SingleTaskLowestEnergy(EasTest):
+    """
+    Goal
+    ====
+
+    Check that a lone task in the system is placed according to the lowest
+    energy cost.
+
+    Detailed Description
+    ====================
+
+    Run workloads that consist of a single task, assuming the other load on the
+    system is negligible, and that no other configuration, such as boosting with
+    schedtune, has been done.
+
+
+    Expected Behaviour
+    ==================
+
+    Ths single task should be placed on the CPU/OPP combination that uses the
+    least energy without exceeding a certain utilization level on the CPU.
+
+    """
+
+    conf_basename = "single_task.config"
+
+    def test_least_energy(self, experiment, tasks):
+        assert len(tasks) == 1
+        task = tasks[0]
+
+        # TODO: determine this from the workload, so we can run multiple
+        # workloads and re-use the test
+        task_util_pct = 20
+        # TODO configure 20% margin
+        required_capacity = task_util * 1.2 * (1024 / 100.)
+
+        # Find CPU/OPP pairs that could contain the task
+        candidates = []
+        for cpu_nrg in nrg_model.get_level("cpu"):
+            possible_states = [s for s in cpu_nrg.active_states
+                               if s.capacity > required_capacity]
+            if not possible_states:
+                # This CPU can't handle this task at any frequency
+                continue
+
+            best_state = min(possible_states, key=lambda s: s.energy)
+            candidates.append(cpu_nrg, cpu_nrg.active_states.index(best_state))
+
+        assert len(candidates)
+
+        # Find which capacity group would use the least energy while running the
+        # task
+
+        # TODO: Would this be better as a method of the energy model that takes
+        # a distribution of utilisation and guesses energy based on an educated
+        # guess about idle states?
+        candidates_nrg = []
+        for cap_group, cap_idx in candidates:
+            # Within the capacity group it doesn't matter which CPU ran the task
+            cpu = cap_group['cpus'][0]
+
+            energy = 0
+            for level in nrg_model:
+                for node in nrg_model.get_level(level):
+                    if cpu in node.cpus:
+                        util = 0.2
+                    else:
+                        util = 0
+
+                    # Assume only the shallowest idle state is used
+                    # TODO come up with a way of modeling idle states
+                    idle_energy = (1 - util) * node.idle_energy[0]
+                    active_energy = util * node.active_states[cap_idx].energy
+
+                    energy += idle_energy + active_energy
+
+            candidates_nrg.append(cap_group, cap_idx, energy)
+
+        best_group, best_opp_idx, _ = min(candidates_nrg, key=lambda c: c[2])
+
 class ForkMigration(EasTest):
     """
     Goal
