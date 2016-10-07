@@ -20,8 +20,10 @@ import json
 import operator
 import os
 import trappy
+from trappy.utils import squash_into_window
 import unittest
 
+from bart.common.Utils import interval_sum
 from bart.sched.SchedAssert import SchedAssert
 from bart.sched.SchedMultiAssert import SchedMultiAssert
 from devlib.target import TargetError
@@ -81,6 +83,10 @@ class EasTest(LisaTest):
     def get_start_time(self, experiment):
         start_times_dict = self.get_multi_assert(experiment).getStartTime()
         return min([t["starttime"] for t in start_times_dict.itervalues()])
+
+    def get_end_time(self, experiment):
+        start_times_dict = self.get_multi_assert(experiment).getEndTime()
+        return max([t["endtime"] for t in start_times_dict.itervalues()])
 
     def _do_test_first_cpu(self, experiment, tasks):
         """Test that all tasks start on a big CPU"""
@@ -184,6 +190,12 @@ class SingleTaskLowestEnergy(EasTest):
             candidates_nrg.append((cpu_nrg, cap_idx, energy))
 
         best_nrg, best_cap_idx, _ = min(candidates_nrg, key=lambda c: c[2])
+        expected_max_freq = best_nrg.active_states[best_cap_idx].frequency
+
+        logging.debug("Should run on CPUs {} with freq <= {}".format(
+            best_nrg.cpus, expected_max_freq))
+
+        # Check that the task ran on the correct CPUs
 
         # This doesn't actually need to be a SchedMultiAssert, could just be a
         # SchedAssert since we only have one task.
@@ -197,6 +209,35 @@ class SingleTaskLowestEnergy(EasTest):
                 percent=True,
                 rank=len(tasks)),
             msg="Didn't run on expected cores")
+
+        #
+        # Check that the CPU frequencies were low enough
+        #
+
+        # Get a ftrace DataFrame for the entire execution
+        ftrace = trappy.FTrace(experiment.out_dir)
+
+        freq_df = ftrace.cpu_frequency.data_frame
+
+        # Time-series DataFrame for the frequency of the CPU of interest
+        # (We're assuming cluster == frequency domain here)
+        cpu_freq_df = freq_df[freq_df['cpu'] == best_nrg.cpus[0]]
+
+        start_time = self.get_start_time(experiment)
+        end_time = self.get_end_time(experiment)
+
+        cpu_freq_df = squash_into_window(cpu_freq_df, (start_time, end_time))
+
+        # Time-series of booleans, True exactly when freq was higher than
+        # necessary
+        freq_too_high_df = cpu_freq_df['frequency'] > expected_max_freq
+
+        # Amount of time in above time-series where the value is True
+        freq_too_high_time = interval_sum(freq_too_high_df, value=True)
+
+        # Later we might want to modify this test to allow a little
+        # (configurable) leeway here. For now we'll be harsh.
+        self.assertEqual(freq_too_high_time, 0);
 
 class ForkMigration(EasTest):
     """
