@@ -119,19 +119,20 @@ class SingleTaskLowestEnergy(EasTest):
 
     conf_basename = "single_task.config"
 
+    @experiment_test
     def test_least_energy(self, experiment, tasks):
         assert len(tasks) == 1
         task = tasks[0]
 
         # TODO: determine this from the workload, so we can run multiple
         # workloads and re-use the test
-        task_util_pct = 20
+        task_util = 0.2
         # TODO configure 20% margin
-        required_capacity = task_util * 1.2 * (1024 / 100.)
+        required_capacity = task_util * 1.2 * self.te.nrg_model.capacity_scale
 
         # Find CPU/OPP pairs that could contain the task
         candidates = []
-        for cpu_nrg in nrg_model.get_level("cpu"):
+        for cpu_nrg in self.te.nrg_model.get_level("cpu"):
             possible_states = [s for s in cpu_nrg.active_states
                                if s.capacity > required_capacity]
             if not possible_states:
@@ -139,7 +140,11 @@ class SingleTaskLowestEnergy(EasTest):
                 continue
 
             best_state = min(possible_states, key=lambda s: s.energy)
-            candidates.append(cpu_nrg, cpu_nrg.active_states.index(best_state))
+            best_state_idx = cpu_nrg.active_states.index(best_state)
+            candidates.append((cpu_nrg, best_state_idx))
+            logging.debug(
+                "Could run capacity {} on CPUs {} at OPP {} or above".format(
+                    required_capacity, cpu_nrg.cpus, best_state_idx))
 
         assert len(candidates)
 
@@ -150,13 +155,13 @@ class SingleTaskLowestEnergy(EasTest):
         # a distribution of utilisation and guesses energy based on an educated
         # guess about idle states?
         candidates_nrg = []
-        for cap_group, cap_idx in candidates:
+        for cpu_nrg, cap_idx in candidates:
             # Within the capacity group it doesn't matter which CPU ran the task
-            cpu = cap_group['cpus'][0]
+            cpu = cpu_nrg.cpus[0]
 
             energy = 0
-            for level in nrg_model:
-                for node in nrg_model.get_level(level):
+            for level in self.te.nrg_model:
+                for node in self.te.nrg_model.get_level(level):
                     if cpu in node.cpus:
                         util = 0.2
                     else:
@@ -164,14 +169,17 @@ class SingleTaskLowestEnergy(EasTest):
 
                     # Assume only the shallowest idle state is used
                     # TODO come up with a way of modeling idle states
-                    idle_energy = (1 - util) * node.idle_energy[0]
+                    idle_energy = (1 - util) * node.idle_states[0].energy
                     active_energy = util * node.active_states[cap_idx].energy
 
                     energy += idle_energy + active_energy
 
-            candidates_nrg.append(cap_group, cap_idx, energy)
+            logging.debug("Could CPUs {} at OPP {} would use energy {}".format(
+                cpu_nrg.cpus, best_state_idx, energy))
+            candidates_nrg.append((cpu_nrg, cap_idx, energy))
 
-        best_group, best_opp_idx, _ = min(candidates_nrg, key=lambda c: c[2])
+        best_nrg, best_cap_idx, _ = min(candidates_nrg, key=lambda c: c[2])
+        print(best_nrg.cpus, best_cap_idx)
 
 class ForkMigration(EasTest):
     """
