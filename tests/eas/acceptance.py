@@ -124,15 +124,20 @@ class SingleTaskLowestEnergy(EasTest):
         assert len(tasks) == 1
         task = tasks[0]
 
-        # TODO: determine this from the workload, so we can run multiple
-        # workloads and re-use the test
+        # TODO: I don't think the topological level should be explicit, but
+        # that's the way trappy works. Any way around this?
+        topo_level = "cluster"
+
+        # TODO: determine
+        # this from the workload, so we can run multiple workloads and re-use
+        # the test
         task_util = 0.2
         # TODO configure 20% margin
         required_capacity = task_util * 1.2 * self.te.nrg_model.capacity_scale
 
         # Find CPU/OPP pairs that could contain the task
         candidates = []
-        for cpu_nrg in self.te.nrg_model.get_level("cpu"):
+        for cpu_nrg in self.te.nrg_model.get_level(topo_level):
             possible_states = [s for s in cpu_nrg.active_states
                                if s.capacity > required_capacity]
             if not possible_states:
@@ -179,7 +184,19 @@ class SingleTaskLowestEnergy(EasTest):
             candidates_nrg.append((cpu_nrg, cap_idx, energy))
 
         best_nrg, best_cap_idx, _ = min(candidates_nrg, key=lambda c: c[2])
-        print(best_nrg.cpus, best_cap_idx)
+
+        # This doesn't actually need to be a SchedMultiAssert, could just be a
+        # SchedAssert since we only have one task.
+        sched_assert = self.get_multi_assert(experiment)
+        self.assertTrue(
+            sched_assert.assertResidency(
+                topo_level,
+                best_nrg.cpus,
+                task_util * 0.9 * 100,
+                operator.ge,
+                percent=True,
+                rank=len(tasks)),
+            msg="Didn't run on expected cores")
 
 class ForkMigration(EasTest):
     """
