@@ -21,7 +21,7 @@ from collections import namedtuple
 
 from devlib import TargetError
 
-ActiveState = namedtuple("ActiveState", ["capacity", "energy"])
+ActiveState = namedtuple("ActiveState", ["frequency", "capacity", "energy"])
 IdleState = namedtuple("IdleState", ["energy"])
 
 EnergyModelNode = namedtuple("EnergyModelNode",
@@ -44,18 +44,18 @@ class EnergyModel(object):
             cpu_node = [n for n in self._levels["cpu"] if n.cpus[0] in cpus][0]
 
             repr_str += "cluster: {}\n".format(cpus)
-            repr_str += "\t\tcpu" + 45*" " + "cluster\n"
+            repr_str += "\t\tcpu" + 55*" " + "cluster\n"
 
             # Display active states from most to least power
             active_states = reversed(zip(cpu_node.active_states,
                                          cluster_node.active_states))
 
             for cpu_state, cluster_state in active_states:
-                repr_str += "\t\t{}\t{:>45}\n".format(cpu_state, cluster_state)
+                repr_str += "\t\t{}\t{:>55}\n".format(cpu_state, cluster_state)
 
             for cpu_state, cluster_state in zip(cpu_node.idle_states,
                                                 cluster_node.idle_states):
-                repr_str += "\t\t{}\t{:>45}\n".format(cpu_state, cluster_state)
+                repr_str += "\t\t{}\t{:>55}\n".format(cpu_state, cluster_state)
 
         return repr_str
 
@@ -80,12 +80,33 @@ class EnergyModel(object):
         # in theory be extensible to arbitrary depth.
         levels = {"cpu": [], "cluster": []}
 
-        def parse_cap_states(path):
+        # Assume a CPU always occurs in its own group 0
+        nrg_dir_fmt = "{}/cpu{{}}/domain{{}}/group0/energy/".format(
+            sched_domain_path)
+
+        def parse_cap_states(cpu, sched_domain):
+            path = nrg_dir_fmt.format(cpu, sched_domain) + "cap_states"
             vals = [int(v) for v in target.read_value(path).split()]
             # cap_states file is a list of (capacity, power) pairs
-            return [ActiveState(c, p) for c, p in zip(vals[::2], vals[1::2])]
+            return [(c, p) for c, p in zip(vals[::2], vals[1::2])]
 
-        def parse_idle_states(path):
+        def parse_active_states(cpu, sched_domain):
+            cap_states = parse_cap_states(cpu, sched_domain)
+
+            cpufreq_freqs = target.cpufreq.list_frequencies(cpu)
+
+            # TODO: we would like to have an expression of frequency domains as
+            # a separate concept from "clusters". For now, just check they are
+            # the same.
+            assert target.cpufreq.get_domain_cpus(cpu) == cpus
+
+            assert len(cpufreq_freqs) == len(cap_states)
+
+            return [ActiveState(f, c, e) for f, (c, e) in
+                    zip(cpufreq_freqs, cap_states)]
+
+        def parse_idle_states(cpu, domain):
+            path = nrg_dir_fmt.format(cpu, domain) + "idle_states"
             return [IdleState(int(v)) for v in target.read_value(path).split()]
 
         for cpus in topology.get_level("cluster"):
@@ -95,13 +116,8 @@ class EnergyModel(object):
             # Read CPU level data for this cluster
             #
 
-            # Here we assume that all CPUs in domain0 are the same, so we just
-            # use group0 on a single CPU and duplicate that.
-            fmt = "{}/cpu{}/domain0/group0/energy/"
-            nrg_dir = fmt.format(sched_domain_path, cpu)
-
-            active_states = parse_cap_states(nrg_dir + "cap_states")
-            idle_states = parse_idle_states(nrg_dir + "idle_states")
+            active_states = parse_active_states(cpu, 0)
+            idle_states = parse_idle_states(cpu, 0)
 
             for cpu in cpus:
                 node = EnergyModelNode([cpu], active_states, idle_states)
@@ -111,12 +127,8 @@ class EnergyModel(object):
             # Read cluster-level data
             #
 
-            # Assume a CPU always occurs in its own group 0
-            fmt = "{}/cpu{}/domain1/group0/energy/"
-            nrg_dir = fmt.format(sched_domain_path, cpu)
-
-            active_states = parse_cap_states(nrg_dir + "cap_states")
-            idle_states = parse_idle_states(nrg_dir + "idle_states")
+            cap_states = parse_cap_states(cpu, 1)
+            idle_states = parse_idle_states(cpu, 0)
 
             node = EnergyModelNode(cpus, active_states, idle_states)
             levels["cluster"].append(node)
