@@ -59,6 +59,9 @@ class EnergyModel(object):
 
         return repr_str
 
+    def __iter__(self):
+        return self._levels.__iter__()
+
     def _levels_from_target(self, target):
         topology = self.topology
 
