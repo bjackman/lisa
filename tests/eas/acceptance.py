@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import logging
 import json
 import operator
 import os
@@ -28,6 +29,8 @@ from devlib.target import TargetError
 from env import TestEnv
 from devlib.utils.misc import memoized
 from test import LisaTest, experiment_test
+
+logging.getLogger().setLevel(logging.DEBUG)
 
 # Read the config file and update the globals
 CONF_FILE = os.path.join(
