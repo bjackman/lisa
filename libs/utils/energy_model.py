@@ -28,6 +28,8 @@ EnergyModelNode = namedtuple("EnergyModelNode",
                              ["cpus", "active_states", "idle_states"])
 
 class EnergyModel(object):
+    capacity_scale = 1024
+
     def __init__(self, topology, target):
         self.topology = topology
 
