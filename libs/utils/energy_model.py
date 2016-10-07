@@ -42,14 +42,18 @@ class EnergyModel(object):
             cpu_node = [n for n in self._levels["cpu"] if n.cpus[0] in cpus][0]
 
             repr_str += "cluster: {}\n".format(cpus)
+            repr_str += "\t\tcpu" + 45*" " + "cluster\n"
 
-            for cpu_state, cluster_state in zip(cpu_node.active_states,
-                                                cluster_node.active_states):
-                repr_str += "\t\t{}\t{}\n".format(cpu_state, cluster_state)
+            # Display active states from most to least power
+            active_states = reversed(zip(cpu_node.active_states,
+                                         cluster_node.active_states))
+
+            for cpu_state, cluster_state in active_states:
+                repr_str += "\t\t{}\t{:>45}\n".format(cpu_state, cluster_state)
 
             for cpu_state, cluster_state in zip(cpu_node.idle_states,
                                                 cluster_node.idle_states):
-                repr_str += "\t\t{}\t{}\n".format(cpu_state, cluster_state)
+                repr_str += "\t\t{}\t{:>45}\n".format(cpu_state, cluster_state)
 
         return repr_str
 
