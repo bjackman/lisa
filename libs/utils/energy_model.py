@@ -35,8 +35,6 @@ class EnergyModel(object):
 
         self._levels = self._levels_from_target(target)
 
-        print(self.__repr__())
-
     def __repr__(self):
         repr_str = "EnergyModel:\n"
         for cluster_node in self._levels["cluster"]:
@@ -51,11 +49,11 @@ class EnergyModel(object):
                                          cluster_node.active_states))
 
             for cpu_state, cluster_state in active_states:
-                repr_str += "\t\t{}\t{:>55}\n".format(cpu_state, cluster_state)
+                repr_str += "\t\t{:<30}\t{:>30}\n".format(cpu_state, cluster_state)
 
             for cpu_state, cluster_state in zip(cpu_node.idle_states,
                                                 cluster_node.idle_states):
-                repr_str += "\t\t{}\t{:>55}\n".format(cpu_state, cluster_state)
+                repr_str += "\t\t{:<30}\t{:>30}\n".format(cpu_state, cluster_state)
 
         return repr_str
 
