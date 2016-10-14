@@ -19,7 +19,6 @@ import json
 import operator
 import os
 import trappy
-from trappy.utils import squash_into_window
 import unittest
 
 from bart.common.Utils import interval_sum
@@ -108,12 +107,9 @@ class SingleTaskLowestEnergy(EasTest):
 
     @experiment_test
     def test_task_placement(self, experiment, tasks):
-        assert len(tasks) == 1
-        task = tasks[0]
+        [task] = tasks
 
-        # TODO: Don't do this lol
-        from platforms.juno_energy import juno_nrg
-        nrg_model = juno_nrg
+        nrg_model = self.te.nrg_model
 
         [phase] = experiment.wload.params["profile"][task]["phases"]
         required_cap = (phase.duty_cycle_pct / 100.
@@ -158,37 +154,6 @@ class SingleTaskLowestEnergy(EasTest):
                 rank=len(tasks)),
             msg="Task didn't run for 90% of its time on cpus {}".format(cpus))
 
-    @experiment_test
-    def __disabled_test_freq(self, experiment, tasks):
-        return True
-        #
-        # Check that the CPU frequencies were low enough
-        #
-
-        # Get a ftrace DataFrame for the entire execution
-        ftrace = trappy.FTrace(experiment.out_dir)
-
-        freq_df = ftrace.cpu_frequency.data_frame
-
-        # Time-series DataFrame for the frequency of the CPU of interest
-        # (We're assuming cluster == frequency domain here)
-        cpu_freq_df = freq_df[freq_df['cpu'] == best_nrg.cpus[0]]
-
-        start_time = self.get_start_time(experiment)
-        end_time = self.get_end_time(experiment)
-
-        cpu_freq_df = squash_into_window(cpu_freq_df, (start_time, end_time))
-
-        # Time-series of booleans, True exactly when freq was higher than
-        # necessary
-        freq_too_high_df = cpu_freq_df['frequency'] > expected_max_freq
-
-        # Amount of time in above time-series where the value is True
-        freq_too_high_time = interval_sum(freq_too_high_df, value=True)
-
-        # Later we might want to modify this test to allow a little
-        # (configurable) leeway here. For now we'll be harsh.
-        self.assertEqual(freq_too_high_time, 0);
 
 class ForkMigration(EasTest):
     """
