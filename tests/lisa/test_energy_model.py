@@ -94,6 +94,23 @@ levels = {
 
 em = EnergyModel(levels=levels)
 
+class TestOptimalPlacement(TestCase):
+    def test_single_small(self):
+        placements = em.find_optimal_placements({"task1": 1})
+        # This will break if the order of the returned list changes, sorry.
+        self.assertEqual(placements, [{"task1": 0}, {"task1": 1}])
+
+    def test_single_big(self):
+        placements = em.find_optimal_placements({"task1": 350})
+        # This will break if the order of the returned list changes, sorry.
+        self.assertEqual(placements, [{"task1": 2}, {"task1": 3}])
+
+    def test_packing(self):
+        tasks = {"task" + str(i) : 10 for i in range(5)}
+        placements = em.find_optimal_placements(tasks)
+        for placement in placements:
+            self.assertTrue(all(cpu in [0, 1] for cpu in placement.values()))
+
 class TestBiggestCpus(TestCase):
     def test_biggest_cpus(self):
         self.assertEqual(em.biggest_cpus, [2, 3])

@@ -17,6 +17,7 @@
 
 import logging
 from collections import namedtuple, OrderedDict
+from itertools import product
 # from trappy.stats.Topology import Topology
 
 from devlib import TargetError
@@ -263,3 +264,25 @@ class EnergyModel(object):
         max_cap = max(n.max_capacity for n in self.get_level("cpu"))
         return [n.cpus[0] for n in self.get_level("cpu")
                 if n.max_capacity == max_cap]
+
+    def find_optimal_placements(self, capacities):
+        tasks = capacities.keys()
+
+        num_candidates = len(self.cpus) ** len(tasks)
+        if (num_candidates > 100 * 1000):
+            logging.warning("Er, we might not be able to brute force this one")
+
+        candidates = []
+        for cpus in product(self.cpus, repeat=len(tasks)):
+            placement = {task: cpu for task, cpu in zip(tasks, cpus)}
+
+            util = [0 for _ in self.cpus]
+            for task, cpu in placement.items():
+                util[cpu] += capacities[task]
+
+            energy = self.estimate_from_cpu_util(util)
+            candidates.append((placement, energy))
+
+        # Whittle down to those that give the lowest energy estimate
+        min_nrg = min(e for p, e in candidates)
+        return [p for p, e in candidates if e == min_nrg]
