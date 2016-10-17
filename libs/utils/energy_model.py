@@ -257,3 +257,9 @@ class EnergyModel(object):
                        + ((1 - active_time) * idle_power))
 
         return power
+
+    @property
+    def biggest_cpus(self):
+        max_cap = max(n.max_capacity for n in self.get_level("cpu"))
+        return [n.cpus[0] for n in self.get_level("cpu")
+                if n.max_capacity == max_cap]

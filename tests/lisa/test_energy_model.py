@@ -94,6 +94,10 @@ levels = {
 
 em = EnergyModel(levels=levels)
 
+class TestBiggestCpus(TestCase):
+    def test_biggest_cpus(self):
+        self.assertEqual(em.biggest_cpus, [2, 3])
+
 class TestMaxCap(TestCase):
     def test_max_cap(self):
         max_caps = [n.max_capacity for n in em.get_level("cpu")]
