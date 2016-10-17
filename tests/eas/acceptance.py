@@ -144,8 +144,10 @@ class SingleTaskLowestEnergy(EasTest):
         # also assume that that is exactly one cluster.
         # If necessary we can remove those assumptions by making assertResidency
         # or a version thereof work for arbitrary sets of CPUs.
-        self.assertIn(cpus, self.te.topology.get_level("cluster"),
-                      msg="Topology clusters must be homogenous")
+        if cpus not in self.te.topology.get_level("cluster"):
+            raise ValueError("Topology clusters must be homogenous")
+
+        logging.info("Task {} should run on cpus {}".format(task, cpus))
 
         sched_assert = self.get_multi_assert(experiment)
         self.assertTrue(
@@ -156,8 +158,59 @@ class SingleTaskLowestEnergy(EasTest):
                 operator.ge,
                 percent=True,
                 rank=len(tasks)),
-            msg="Task didn't run for 90% of its time on cpus {}".format(cpus))
+            msg="Task didn't run for {}% of its time on cpus {}".format(
+                EXPECTED_RESIDENCY_PCT, cpus))
 
+class ManyTasksLowestEnergy(EasTest):
+    """
+    Goal
+    ====
+
+    The arrangement of an arbitrary set of tasks is the most energy efficient.
+
+    Detailed Description
+    ====================
+
+    Take a single stage workload and search for the most energy-efficient task
+    placements for that workload.
+
+    Expected Behaviour
+    ==================
+
+    The tasks were placed according to one of the optimal placements.
+    """
+
+    conf_basename = "many_tasks.config"
+
+    @experiment_test
+    def test_task_placement(self, experiment, tasks):
+        nrg_model = self.te.nrg_model
+
+        def task_capacity(task):
+            # Must be a single-phase task
+            [phase] = experiment.wload.params["profile"][task]["phases"]
+            return (phase.duty_cycle_pct * nrg_model.capacity_scale / 100.)
+
+        capacities = {t: task_capacity(t) for t in tasks}
+
+        def assert_placement(placement):
+            for task, cpu in placement.iteritems():
+                sched_assert = self.get_sched_assert(experiment, task)
+                if not sched_assert.assertResidency(
+                        "cpu",
+                        [cpu],
+                        EXPECTED_RESIDENCY_PCT,
+                        operator.ge,
+                        percent=True):
+                    res = sched_assert.getResidency("cpu", [cpu], percent=True)
+                    return False
+            return True
+
+        optimal_placements = nrg_model.find_optimal_placements(capacities)
+
+        self.assertTrue(
+            any(assert_placement(p) for p in optimal_placements),
+            msg="Tasks were not placed for optimal energy efficiency")
 
 class ForkMigration(EasTest):
     """
