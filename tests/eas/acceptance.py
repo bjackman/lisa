@@ -105,6 +105,11 @@ class SingleTaskLowestEnergy(EasTest):
     conf_basename = "single_task.config"
 
     @experiment_test
+    def test_first_cpu(self, experiment, tasks):
+        """Fork Migration: Test First CPU"""
+        self._do_test_first_cpu(experiment, tasks)
+
+    @experiment_test
     def test_task_placement(self, experiment, tasks):
         [task] = tasks
 
