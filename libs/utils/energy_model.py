@@ -24,9 +24,13 @@ from devlib import TargetError
 ActiveState = namedtuple("ActiveState", ["capacity", "power"])
 ActiveState.__new__.__defaults__ = (None, None)
 
-EnergyModelNode = namedtuple(
-    "EnergyModelNode", ["cpus", "active_states", "idle_states",
-                        "power_domain", "freq_domain"])
+class EnergyModelNode(namedtuple("EnergyModelNode",
+                                 ["cpus", "active_states", "idle_states",
+                                  "power_domain", "freq_domain"])):
+    @property
+    def max_capacity(self):
+        return max(s.capacity for s in self.active_states.values())
+
 EnergyModelNode.__new__.__defaults__ = (None, None, None, None, None)
 
 class PowerDomain(object):
@@ -51,6 +55,11 @@ class EnergyModel(object):
         self._levels = levels
 
         self.num_cpus = len(self._levels["cpu"])
+        self.cpus = [n.cpus[0] for n in levels["cpu"]]
+        if self.cpus != range(self.num_cpus):
+            raise ValueError("CPUs are sparse or out of order")
+        if any(len(n.cpus) != 1 for n in levels["cpu"]):
+            raise ValueError("'cpu' level nodes must all have exactly 1 CPU")
 
     def get_level(self, level_name):
         return self._levels[level_name]
@@ -160,7 +169,7 @@ class EnergyModel(object):
                     parent_state = find_deepest(pd.parent)
                     if parent_state:
                         return parent_state
-                return pd.idle_states[-1]
+                return pd.idle_states[-1] if len(pd.idle_states) else None
             return None
 
         return [find_deepest(c.power_domain) or c.power_domain.idle_states[0]

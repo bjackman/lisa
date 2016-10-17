@@ -94,6 +94,11 @@ levels = {
 
 em = EnergyModel(levels=levels)
 
+class TestMaxCap(TestCase):
+    def test_max_cap(self):
+        max_caps = [n.max_capacity for n in em.get_level("cpu")]
+        self.assertEqual(max_caps, [200, 200, 400, 400])
+
 class TestEnergyEst(TestCase):
     def test_all_overutilized(self):
         self.assertEqual(em.estimate_from_cpu_util([10000] * 4),
