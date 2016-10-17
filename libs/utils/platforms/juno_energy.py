@@ -8,6 +8,7 @@ a53_cluster_active_states = {
     850000: ActiveState(power=57)
 }
 
+# TODO warn if any of the idle states aren't represented by power domains
 a53_cluster_idle_states = {
     "WFI":              56,
     "cpu-sleep-0":      56,
