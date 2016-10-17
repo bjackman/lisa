@@ -70,12 +70,11 @@ class EasTest(LisaTest):
 
     def _do_test_first_cpu(self, experiment, tasks):
         """Test that all tasks start on a big CPU"""
-
         sched_assert = self.get_multi_assert(experiment)
 
         self.assertTrue(
             sched_assert.assertFirstCpu(
-                self.target.bl.bigs,
+                self.te.nrg_model.biggest_cpus,
                 rank=len(tasks)),
             msg="Not all the new generated tasks started on a big CPU")
 
