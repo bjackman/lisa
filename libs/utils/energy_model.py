@@ -20,6 +20,9 @@ from collections import namedtuple, OrderedDict
 from itertools import product
 # from trappy.stats.Topology import Topology
 
+import pandas as pd
+import numpy as np
+
 from devlib import TargetError
 
 ActiveState = namedtuple("ActiveState", ["capacity", "power"])
@@ -31,6 +34,9 @@ class EnergyModelNode(namedtuple("EnergyModelNode",
     @property
     def max_capacity(self):
         return max(s.capacity for s in self.active_states.values())
+
+    def idle_state_idx(self, state):
+        return self.idle_states.keys().index(state)
 
 EnergyModelNode.__new__.__defaults__ = (None, None, None, None, None)
 
@@ -160,19 +166,20 @@ class EnergyModel(object):
 
         return levels, power_domains, freq_domains
 
-        # for level_idx, level_name in enumerate(topology):
-        #     topo_level = topology.get_level(level_name)
-
-    def guess_idle_states(self, util_distrib):
+    def _guess_idle_idxs(self, cpus_active):
         def find_deepest(pd):
-            if not any(util_distrib[c] != 0 for c in pd.cpus):
+            if not any(cpus_active[c] != 0 for c in pd.cpus):
                 if pd.parent:
                     parent_state = find_deepest(pd.parent)
                     if parent_state:
                         return parent_state
-                return pd.idle_states[-1] if len(pd.idle_states) else None
-            return None
+                return len(pd.idle_states) -1 if len(pd.idle_states) else -1
+            return -1
 
+        return [find_deepest(c.power_domain) for c in self._levels["cpu"]]
+
+    def guess_idle_states(self, util_distrib):
+        # TODO: map from _guess_idle_idxs to what's required here
         return [find_deepest(c.power_domain) or c.power_domain.idle_states[0]
                 for c in self._levels["cpu"]]
 
@@ -243,11 +250,8 @@ class EnergyModel(object):
             # For now we assume clusters map to frequency domains 1:1
             assert all(freqs[c] == freq for c in cpus[1:])
 
-            def mean(xs):
-                return sum(xs) / len(xs)
-
             active_power = node.active_states[freq].power
-            idle_power = mean([node.idle_states[idle_states[c]] for c in cpus])
+            idle_power = max([node.idle_states[idle_states[c]] for c in cpus])
 
             # This works great for the synthetic periodic workloads we use in
             # Lisa (where all threads wake up at the same time) but is no good
@@ -286,3 +290,76 @@ class EnergyModel(object):
         # Whittle down to those that give the lowest energy estimate
         min_nrg = min(e for p, e in candidates)
         return [p for p, e in candidates if e == min_nrg]
+
+    # TODO: We need a "power in state" function that takes a list of frequencies
+    # and idle states and returns power, then use that function throughout.
+
+    # TODO: The function below takes several seconds, I bet it can be made
+    # faster with Ninjutsu
+
+    def estimate_from_trace(self, trace):
+        idle_df = trace.ftrace.cpu_idle.data_frame
+        idle_df = idle_df.pivot(columns="cpu_id")["state"]
+        idle_df.fillna(method="ffill", inplace=True)
+
+        freq_df = trace.ftrace.cpu_frequency.data_frame
+        freq_df = freq_df.pivot(columns="cpu")["frequency"]
+        freq_df.fillna(method="ffill", inplace=True)
+
+        df = pd.concat([idle_df, freq_df], axis=1, keys=["idle", "freq"])
+        df.fillna(method="ffill", inplace=True)
+
+        # Where we don't have the data (because no events arrived yet), fill it
+        # in with worst-case.
+        max_freqs = {c: max(n.active_states.keys())
+                     for c, n in enumerate(self._levels["cpu"])}
+        df.fillna({"idle": -1, "freq": max_freqs}, inplace=True)
+
+        def row_power(row):
+            # Pandas converts our numbers to floats so it can use NaN, convert
+            # them back to ints.
+            def to_int(i):
+                if pd.isnull(i) or int(i) == -1:
+                    return -1
+                else:
+                    return int(i)
+
+            # These are the states cpuidle thinks the CPUs are in
+            cpuidle_idxs = [to_int(i) for i in row["idle"].values]
+
+            # These are the deepest states the hardware could actually enter
+            cpus_active = [s < 0 for s in cpuidle_idxs]
+            ideal_idxs = self._guess_idle_idxs(cpus_active)
+
+            # The states the HW actually enters is generally the shallowest of
+            # the two possibilities above.
+            idle_idxs = [min(c, i) for c, i in zip(cpuidle_idxs, ideal_idxs)]
+
+            # TODO: AFAICT the kernel automatically traces the frequency of all
+            # CPUs in affected_cpus when a frequency is changed. Need to double
+            # check. If not, we can fix that here using our domain data.
+
+            power = 0
+            for node in self._levels["cpu"]:
+                [cpu] = node.cpus
+                idx = idle_idxs[cpu]
+                if idx >= 0:
+                    power += node.idle_states.values()[idx]
+                else:
+                    freq = row["freq"][cpu]
+                    power += node.active_states[freq].power
+
+            for node in self._levels["cluster"]:
+                cpus = node.cpus
+                idxs = [idle_idxs[c] for c in cpus]
+                if all(i >= 0 for i in idxs):
+                    idx = max(idxs)
+                    power += node.idle_states.values()[idx]
+                else:
+                    freq = row["freq"][cpus[0]]
+                    assert all(row["freq"][c] == freq for c in cpus[1:])
+                    power += node.active_states[freq].power
+
+            return power
+
+        return pd.DataFrame(df.apply(row_power, axis=1), columns=["power"])
