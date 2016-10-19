@@ -148,6 +148,25 @@ class TestEnergyEst(TestCase):
                          + (0.5 * 10) # LITTLE cluster active power
                          + 2)         # big cluster power
 
+class TestIdleIdxs(TestCase):
+    def test_zero_util_deepest(self):
+        self.assertEqual(em._guess_idle_idxs([0] * 4), [2] * 4)
+
+    def test_single_cpu_used(self):
+        states = em._guess_idle_idxs([0, 0, 0, 1])
+        self.assertEqual(states, [2, 2, 1, -1])
+
+        states = em._guess_idle_idxs([0, 1, 0, 0])
+        self.assertEqual(states, [1, -1, 2, 2,])
+
+    def test_all_cpus_used(self):
+        states = em._guess_idle_idxs([1, 1, 1, 1])
+        self.assertEqual(states, [-1] * 4)
+
+    def test_one_cpu_per_cluster(self):
+        states = em._guess_idle_idxs([0, 1, 0, 1])
+        self.assertEqual(states, [1, -1] * 2)
+
 class TestIdleStates(TestCase):
     def test_zero_util_deepest(self):
         self.assertEqual(em.guess_idle_states([0] * 4), ["cluster-sleep-0"] * 4)
