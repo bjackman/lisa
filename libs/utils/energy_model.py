@@ -257,10 +257,8 @@ class EnergyModel(object):
         for node in self._levels["cluster"]:
             cpus = node.cpus
 
-            freq = freqs[cpus[0]]
-            idle_state = idle_states[cpus[0]]
-
             # For now we assume clusters map to frequency domains 1:1
+            freq = freqs[cpus[0]]
             assert all(freqs[c] == freq for c in cpus[1:])
 
             active_power = node.active_states[freq].power
