@@ -1,29 +1,34 @@
 from energy_model import (EnergyModel,
                           ActiveState, EnergyModelNode, PowerDomain)
+from collections import OrderedDict
 from unittest import TestCase
 
-little_cluster_active_states = {
-    1000: ActiveState(power=10),
-    2000: ActiveState(power=20),
-}
 
-little_cluster_idle_states = {
-    "WFI":              5,
-    "cpu-sleep-0":      5,
-    "cluster-sleep-0":  1
-}
+from energy_model import (EnergyModel,
+                          ActiveState, EnergyModelNode, PowerDomain)
 
-little_cpu_active_states = {
-    1000: ActiveState(capacity=100, power=100),
-    1500: ActiveState(capacity=150, power=150),
-    2000: ActiveState(capacity=200, power=200),
-}
+little_cluster_active_states = OrderedDict([
+    (1000, ActiveState(power=10)),
+    (2000, ActiveState(power=20)),
+])
 
-little_cpu_idle_states = {
-    "WFI":              5,
-    "cpu-sleep-0":      0,
-    "cluster-sleep-0":  0
-}
+little_cluster_idle_states = OrderedDict([
+    ("WFI",              5),
+    ("cpu-sleep-0",      5),
+    ("cluster-sleep-0",  1),
+])
+
+little_cpu_active_states = OrderedDict([
+    (1000, ActiveState(capacity=100, power=100)),
+    (1500, ActiveState(capacity=150, power=150)),
+    (2000, ActiveState(capacity=200, power=200)),
+])
+
+little_cpu_idle_states = OrderedDict([
+    ("WFI",              5),
+    ("cpu-sleep-0",      0),
+    ("cluster-sleep-0",  0),
+])
 
 littles=[0, 1]
 little_pd = PowerDomain(cpus=littles,
@@ -41,27 +46,27 @@ def little_cpu_node(cpu):
                            power_domain=cpu_pd,
                            freq_domain=littles)
 
-big_cluster_active_states = {
-    3000: ActiveState(power=30),
-    4000: ActiveState(power=40),
-}
+big_cluster_active_states = OrderedDict([
+    (3000, ActiveState(power=30)),
+    (4000, ActiveState(power=40)),
+])
 
-big_cluster_idle_states = {
-    "WFI":              8,
-    "cpu-sleep-0":      8,
-    "cluster-sleep-0":  2
-}
+big_cluster_idle_states = OrderedDict([
+    ("WFI",              8),
+    ("cpu-sleep-0",      8),
+    ("cluster-sleep-0",  2),
+])
 
-big_cpu_active_states = {
-    3000: ActiveState(capacity=300, power=300),
-    4000: ActiveState(capacity=400, power=400),
-}
+big_cpu_active_states = OrderedDict([
+    (3000, ActiveState(capacity=300, power=300)),
+    (4000, ActiveState(capacity=400, power=400)),
+])
 
-big_cpu_idle_states = {
-    "WFI":              9,
-    "cpu-sleep-0":      0,
-    "cluster-sleep-0":  0
-}
+big_cpu_idle_states = OrderedDict([
+    ("WFI",              9),
+    ("cpu-sleep-0",      0),
+    ("cluster-sleep-0",  0),
+])
 
 bigs=[2, 3]
 big_pd = PowerDomain(cpus=bigs,
