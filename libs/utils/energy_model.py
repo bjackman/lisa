@@ -59,6 +59,9 @@ class PowerDomain(object):
             self.parent.children.append(self)
             self.parent.cpus = self.parent.cpus.union(self.cpus)
 
+    def __repr__(self):
+        return "PowerDomain(cpus={})".format(list(self.cpus))
+
 class EnergyModel(object):
     capacity_scale = 1024
 
