@@ -280,7 +280,12 @@ class EnergyModel(object):
         return [n.cpus[0] for n in self.get_level("cpu")
                 if n.max_capacity == max_cap]
 
-    def find_optimal_placements(self, capacities):
+    # TODO: Clean up energy vs power in here
+
+    # TODO: DOCUMENT AND COMMENT THIS MESS
+
+    # TODO this takes exponential time, we can almost certainly avoid that.
+    def _find_optimal_placements(self, capacities):
         tasks = capacities.keys()
 
         num_candidates = len(self.cpus) ** len(tasks)
@@ -295,12 +300,21 @@ class EnergyModel(object):
             for task, cpu in placement.items():
                 util[cpu] += capacities[task]
 
-            energy = self.estimate_from_cpu_util(util)
-            candidates.append((placement, energy))
+            power = self.estimate_from_cpu_util(util)
+            candidates.append((placement, power))
 
         # Whittle down to those that give the lowest energy estimate
-        min_nrg = min(e for p, e in candidates)
-        return [p for p, e in candidates if e == min_nrg]
+        min_power = min(e for p, e in candidates)
+        for placement, power in candidates:
+            print("candidate:")
+            for t, cpu in placement.iteritems():
+                print("\t{} on {}".format(t, cpu))
+
+        return min_power, [p for p, e in candidates if e == min_power]
+
+    def estimate_workload_power(self, capacities):
+        power, placements = self._find_optimal_placements(capacities)
+        return power
 
     # TODO: We need a "power in state" function that takes a list of frequencies
     # and idle states and returns power, then use that function throughout.
@@ -309,6 +323,8 @@ class EnergyModel(object):
     # faster with Ninjutsu
 
     def estimate_from_trace(self, trace):
+        # TODO all this DataFrame mangling makes Pandas complain; we might be
+        # aliasing things we shouldn't be.
         idle_df = trace.ftrace.cpu_idle.data_frame
         if idle_df.empty:
             raise ValueError("No cpu_idle events found")
