@@ -141,6 +141,15 @@ class TestEnergyEst(TestCase):
                          + 2   # big cluster power
                          + 1)  # LITTLE cluster power
 
+    def test_one_little_half_lowest(self):
+        cpu0_util = 100 * 0.5
+        self.assertEqual(em.estimate_from_cpu_util([cpu0_util, 0, 0, 0]),
+                         (0.5 * 100)  # CPU0 active power
+                         + (0.5 * 5)  # CPU0 idle power
+                         + (0.5 * 5)  # LITTLE cluster idle power
+                         + (0.5 * 10) # LITTLE cluster active power
+                         + 2)         # big cluster power
+
 class TestIdleStates(TestCase):
     def test_zero_util_deepest(self):
         self.assertEqual(em.guess_idle_states([0] * 4), ["cluster-sleep-0"] * 4)
