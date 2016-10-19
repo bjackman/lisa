@@ -28,25 +28,17 @@ from devlib import TargetError
 ActiveState = namedtuple("ActiveState", ["capacity", "power"])
 ActiveState.__new__.__defaults__ = (None, None)
 
-class EnergyModelNode(object):
-    def __init__(self,
-                 cpus, active_states, idle_states,
-                 power_domain=None, freq_domain=None):
-
-        def make_ordered_dict(d,  key=id):
-            return OrderedDict(sorted(d.items(), key=lambda (k, v): key(v)))
-
-        self.cpus = cpus
-        self.power_domain = power_domain
-        self.freq_domain = freq_domain
-
-        self.active_states = make_ordered_dict(active_states,
-                                               key=lambda s: s.power)
-        self.idle_states = make_ordered_dict(idle_states)
-
+class EnergyModelNode(namedtuple("EnergyModelNode",
+                                 ["cpus", "active_states", "idle_states",
+                                  "power_domain", "freq_domain"])):
     @property
     def max_capacity(self):
         return max(s.capacity for s in self.active_states.values())
+
+    def idle_state_idx(self, state):
+        return self.idle_states.keys().index(state)
+
+EnergyModelNode.__new__.__defaults__ = (None, None, None, None, None)
 
 class PowerDomain(object):
     def __init__(self, idle_states, parent, cpus):
