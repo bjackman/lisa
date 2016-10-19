@@ -16,18 +16,20 @@
 #
 
 import json
+import logging
 import operator
 import os
 import trappy
 import unittest
 
-from bart.common.Utils import interval_sum
+from bart.common.Utils import interval_sum, area_under_curve, select_window
 from bart.sched.SchedAssert import SchedAssert
 
 from devlib.target import TargetError
 
 from env import TestEnv
 from test import LisaTest, experiment_test
+from trace import Trace
 
 # Read the config file and update the globals
 CONF_FILE = os.path.join(
@@ -192,25 +194,20 @@ class ManyTasksLowestEnergy(EasTest):
             return (phase.duty_cycle_pct * nrg_model.capacity_scale / 100.)
 
         capacities = {t: task_capacity(t) for t in tasks}
+        expected_power = nrg_model.estimate_workload_power(capacities)
 
-        def assert_placement(placement):
-            for task, cpu in placement.iteritems():
-                sched_assert = self.get_sched_assert(experiment, task)
-                if not sched_assert.assertResidency(
-                        "cpu",
-                        [cpu],
-                        EXPECTED_RESIDENCY_PCT,
-                        operator.ge,
-                        percent=True):
-                    res = sched_assert.getResidency("cpu", [cpu], percent=True)
-                    return False
-            return True
+        start, end = self.get_window(experiment)
+        expected_nrg = expected_power * (end - start)
+        logging.info("Expected energy: {} * {} = {} ".format(
+            expected_power, (end - start), expected_nrg))
 
-        optimal_placements = nrg_model.find_optimal_placements(capacities)
+        events = ["cpu_idle", "cpu_frequency"]
+        trace = Trace(self.te.platform, experiment.out_dir, events)
 
-        self.assertTrue(
-            any(assert_placement(p) for p in optimal_placements),
-            msg="Tasks were not placed for optimal energy efficiency")
+        power_df = select_window(nrg_model.estimate_from_trace(trace),
+                                 (start, end))
+        logging.info("Estimated energy: {}".format(area_under_curve(power_df["power"],
+                                                                    method="rect")))
 
 class ForkMigration(EasTest):
     """
