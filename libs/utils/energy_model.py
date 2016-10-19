@@ -302,10 +302,14 @@ class EnergyModel(object):
 
     def estimate_from_trace(self, trace):
         idle_df = trace.ftrace.cpu_idle.data_frame
+        if idle_df.empty:
+            raise ValueError("No cpu_idle events found")
         idle_df = idle_df.pivot(columns="cpu_id")["state"]
         idle_df.fillna(method="ffill", inplace=True)
 
         freq_df = trace.ftrace.cpu_frequency.data_frame
+        if freq_df.empty:
+            raise ValueError("No cpu_frequency events found")
         freq_df = freq_df.pivot(columns="cpu")["frequency"]
         freq_df.fillna(method="ffill", inplace=True)
 
