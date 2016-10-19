@@ -169,22 +169,32 @@ class EnergyModel(object):
 
         return levels, power_domains, freq_domains
 
-    def _guess_idle_idxs(self, cpus_active):
+    def _guess_idle_states(self, util_distrib):
         def find_deepest(pd):
-            if not any(cpus_active[c] != 0 for c in pd.cpus):
+            if not any(util_distrib[c] != 0 for c in pd.cpus):
                 if pd.parent:
                     parent_state = find_deepest(pd.parent)
                     if parent_state:
                         return parent_state
-                return len(pd.idle_states) -1 if len(pd.idle_states) else -1
-            return -1
+                return pd.idle_states[-1] if len(pd.idle_states) else None
+            return None
 
         return [find_deepest(c.power_domain) for c in self._levels["cpu"]]
 
+    # TODO clean up this dict/list state addressing mess...
+    # I think we can probably go back to just dicts, the only reason we need the
+    # idxs is for "min" right? Maybe we can just get "shallowest", or even give
+    # idle states a compare biz
+
+    def _guess_idle_idxs(self, util_distrib):
+        states = self._guess_idle_states(util_distrib)
+        return [c.idle_state_idx(s) if s else -1
+                for s, c in zip(states, self._levels["cpu"])]
+
     def guess_idle_states(self, util_distrib):
-        # TODO: map from _guess_idle_idxs to what's required here
-        return [find_deepest(c.power_domain) or c.power_domain.idle_states[0]
-                for c in self._levels["cpu"]]
+        states = self._guess_idle_states(util_distrib)
+        return [s or c.power_domain.idle_states[0]
+                for s, c in zip(states, self._levels["cpu"])]
 
     def _guess_freqs(self, util_distrib):
         overutilized = False
