@@ -245,7 +245,7 @@ class EnergyModel(object):
         for cpu, node in enumerate(self._levels["cpu"]):
             assert [cpu] == node.cpus
 
-            cap = node.active_states[freqs[cpu]].power
+            cap = node.active_states[freqs[cpu]].capacity
             cpu_active_time.append(min(util_distrib[cpu] / cap, 1.0))
 
             active_power = node.active_states[freqs[cpu]].power
