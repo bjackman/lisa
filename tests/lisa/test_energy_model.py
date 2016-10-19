@@ -1,5 +1,3 @@
-from energy_model import (EnergyModel,
-                          ActiveState, EnergyModelNode, PowerDomain)
 from collections import OrderedDict
 import unittest
 from unittest import TestCase
