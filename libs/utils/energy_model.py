@@ -193,7 +193,7 @@ class EnergyModel(object):
 
     def guess_idle_states(self, util_distrib):
         states = self._guess_idle_states(util_distrib)
-        return [s or c.power_domain.idle_states[0]
+        return [s or c.idle_states.keys()[0]
                 for s, c in zip(states, self._levels["cpu"])]
 
     def _guess_freqs(self, util_distrib):
@@ -350,7 +350,7 @@ class EnergyModel(object):
             # Pandas converts our numbers to floats so it can use NaN, convert
             # them back to ints.
             def to_int(i):
-                if pd.isnull(i) or int(i) == -1:
+                if pd.isnull(i):
                     return -1
                 else:
                     return int(i)
