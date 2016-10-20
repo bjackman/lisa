@@ -291,8 +291,9 @@ class EnergyModel(object):
         tasks = capacities.keys()
 
         num_candidates = len(self.cpus) ** len(tasks)
-        if (num_candidates > 100 * 1000):
-            logging.warning("Er, we might not be able to brute force this one")
+        logging.info(
+            "%14s - Searching %d configurations for optimal task placement...",
+            "EnergyModel", num_candidates)
 
         candidates = []
         for cpus in product(self.cpus, repeat=len(tasks)):
@@ -307,11 +308,8 @@ class EnergyModel(object):
 
         # Whittle down to those that give the lowest energy estimate
         min_power = min(e for p, e in candidates)
-        for placement, power in candidates:
-            print("candidate:")
-            for t, cpu in placement.iteritems():
-                print("\t{} on {}".format(t, cpu))
 
+        logging.info("%14s - Done", "EnergyModel")
         return min_power, [p for p, e in candidates if e == min_power]
 
     def estimate_workload_power(self, capacities):
