@@ -235,9 +235,11 @@ class EnergyModel(object):
         _, overutilized = self._guess_freqs(util_distrib)
         return overutilized
 
-    def estimate_from_cpu_util(self, util_distrib):
-        freqs = self.guess_freqs(util_distrib)
-        idle_states = self.guess_idle_states(util_distrib)
+    def estimate_from_cpu_util(self, util_distrib, freqs=None, idle_states=None):
+        if freqs is None:
+            freqs = self.guess_freqs(util_distrib)
+        if idle_states is None:
+            idle_states = self.guess_idle_states(util_distrib)
 
         power = 0
 
@@ -359,38 +361,32 @@ class EnergyModel(object):
             cpuidle_idxs = [to_int(i) for i in row["idle"].values]
 
             # These are the deepest states the hardware could actually enter
-            cpus_active = [s < 0 for s in cpuidle_idxs]
-            ideal_idxs = self._guess_idle_idxs(cpus_active)
+            util_distrib = [int(s < 0) for s in cpuidle_idxs]
+            ideal_idxs = self._guess_idle_idxs(util_distrib)
 
             # The states the HW actually enters is generally the shallowest of
             # the two possibilities above.
             idle_idxs = [min(c, i) for c, i in zip(cpuidle_idxs, ideal_idxs)]
+            # Note that where the idle state index is -1, this will give an
+            # invalid state name. However the idle power will be 0 anyway since
+            # the CPU is active.
+            idle_states = [n.idle_states.keys()[i] for n, i
+                           in zip(self._levels["cpu"], idle_idxs)]
 
             # TODO: AFAICT the kernel automatically traces the frequency of all
             # CPUs in affected_cpus when a frequency is changed. Need to double
             # check. If not, we can fix that here using our domain data.
+            freqs = [row["freq"][cpu] for cpu in self.cpus]
 
-            power = 0
-            for node in self._levels["cpu"]:
-                [cpu] = node.cpus
-                idx = idle_idxs[cpu]
-                if idx >= 0:
-                    power += node.idle_states.values()[idx]
-                else:
-                    freq = row["freq"][cpu]
-                    power += node.active_states[freq].power
+            return self.estimate_from_cpu_util(util_distrib,
+                                               idle_states=idle_states,
+                                               freqs=freqs)
 
-            for node in self._levels["cluster"]:
-                cpus = node.cpus
-                idxs = [idle_idxs[c] for c in cpus]
-                if all(i >= 0 for i in idxs):
-                    idx = max(idxs)
-                    power += node.idle_states.values()[idx]
-                else:
-                    freq = row["freq"][cpus[0]]
-                    assert all(row["freq"][c] == freq for c in cpus[1:])
-                    power += node.active_states[freq].power
+        logging.info("%14s - Estimating energy from trace - %d events...",
+                     "EnergyModel", len(df))
 
-            return power
+        ret = pd.DataFrame(df.apply(row_power, axis=1), columns=["power"])
+
+        logging.info("%14s - Done.", "EnergyModel")
 
         return pd.DataFrame(df.apply(row_power, axis=1), columns=["power"])
