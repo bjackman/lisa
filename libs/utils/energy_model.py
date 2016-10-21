@@ -25,6 +25,7 @@ from itertools import product
 import pandas as pd
 import numpy as np
 
+from bart.common.Utils import interval_sum
 from devlib import TargetError
 
 ActiveState = namedtuple("ActiveState", ["capacity", "power"])
@@ -389,12 +390,20 @@ class EnergyModel(object):
             power = self._estimate_from_active_time(util_distrib,
                                                     idle_states=idle_states,
                                                     freqs=freqs)
+            return pd.Series([power], index=["power"])
 
         logging.info("%14s - Estimating energy from trace - %d events...",
                      "EnergyModel", len(df))
 
-        ret = pd.DataFrame(df.apply(row_power, axis=1), columns=["power"])
+        power_df = df.apply(row_power, axis=1)
 
         logging.info("%14s - Done.", "EnergyModel")
 
-        return pd.DataFrame(df.apply(row_power, axis=1), columns=["power"])
+        power_vals = power_df["power"].unique()
+        time_at_power = [interval_sum(power_df["power"], value=p)
+                         for p in power_vals]
+        histogram = pd.DataFrame(
+            time_at_power, index=power_vals, columns=["power"])
+        histogram.sort_index(inplace=True)
+
+        return power_df, histogram
