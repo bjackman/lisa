@@ -237,20 +237,11 @@ class EnergyModel(object):
         _, overutilized = self._guess_freqs(util_distrib)
         return overutilized
 
-    def estimate_from_cpu_util(self, util_distrib, freqs=None, idle_states=None):
-        if freqs is None:
-            freqs = self.guess_freqs(util_distrib)
-        if idle_states is None:
-            idle_states = self.guess_idle_states(util_distrib)
-
+    def _estimate_from_active_time(self, cpu_active_time, freqs, idle_states):
         power = 0
 
-        cpu_active_time = []
         for cpu, node in enumerate(self._levels["cpu"]):
             assert [cpu] == node.cpus
-
-            cap = node.active_states[freqs[cpu]].capacity
-            cpu_active_time.append(min(util_distrib[cpu] / cap, 1.0))
 
             active_power = node.active_states[freqs[cpu]].power
             idle_power = node.idle_states[idle_states[cpu]]
@@ -277,6 +268,23 @@ class EnergyModel(object):
                        + ((1 - active_time) * idle_power))
 
         return power
+
+    def estimate_from_cpu_util(self, util_distrib, freqs=None, idle_states=None):
+        if freqs is None:
+            freqs = self.guess_freqs(util_distrib)
+        if idle_states is None:
+            idle_states = self.guess_idle_states(util_distrib)
+
+        power = 0
+
+        cpu_active_time = []
+        for cpu, node in enumerate(self._levels["cpu"]):
+            assert [cpu] == node.cpus
+            cap = node.active_states[freqs[cpu]].capacity
+            cpu_active_time.append(min(util_distrib[cpu] / cap, 1.0))
+
+        return self._estimate_from_active_time(cpu_active_time,
+                                               freqs, idle_states)
 
     @property
     def biggest_cpus(self):
@@ -378,9 +386,9 @@ class EnergyModel(object):
             # check. If not, we can fix that here using our domain data.
             freqs = [row["freq"][cpu] for cpu in self.cpus]
 
-            return self.estimate_from_cpu_util(util_distrib,
-                                               idle_states=idle_states,
-                                               freqs=freqs)
+            power = self._estimate_from_active_time(util_distrib,
+                                                    idle_states=idle_states,
+                                                    freqs=freqs)
 
         logging.info("%14s - Estimating energy from trace - %d events...",
                      "EnergyModel", len(df))
