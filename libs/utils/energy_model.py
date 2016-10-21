@@ -18,7 +18,9 @@
 import logging
 from collections import namedtuple, OrderedDict
 from itertools import product
-# from trappy.stats.Topology import Topology
+
+# TODO get Topology out of here and share it across Lisa
+#
 
 import pandas as pd
 import numpy as np
