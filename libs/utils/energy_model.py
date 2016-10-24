@@ -398,7 +398,10 @@ class EnergyModel(object):
         power_df = df.apply(row_power, axis=1)
 
         logging.info("%14s - Done.", "EnergyModel")
+        return power_df
 
+    @classmethod
+    def get_power_histogram(cls, power_df):
         power_vals = power_df["power"].unique()
         time_at_power = [interval_sum(power_df["power"], value=p)
                          for p in power_vals]
@@ -406,4 +409,4 @@ class EnergyModel(object):
             time_at_power, index=power_vals, columns=["power"])
         histogram.sort_index(inplace=True)
 
-        return power_df, histogram
+        return histogram
