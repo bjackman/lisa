@@ -197,6 +197,7 @@ class ManyTasksLowestEnergy(EasTest):
         expected_power = nrg_model.estimate_workload_power(capacities)
 
         start, end = self.get_window(experiment)
+        start = start + 0.2 # Allow first 200ms to be a mess
         expected_nrg = expected_power * (end - start)
 
         events = ["cpu_idle", "cpu_frequency"]
