@@ -197,7 +197,8 @@ class ManyTasksLowestEnergy(EasTest):
         expected_power, expected_util = nrg_model._find_optimal_placements(capacities)
 
         start, end = self.get_window(experiment)
-        start = start + 0.2 # Allow first 200ms to be a mess
+        # Allow 400ms to for the system to "settle"
+        start = start + 0.4
         expected_nrg = expected_power * (end - start)
 
         events = ["cpu_idle", "cpu_frequency"]
@@ -205,11 +206,16 @@ class ManyTasksLowestEnergy(EasTest):
 
         power_df = select_window(nrg_model.estimate_from_trace(trace),
                                  (start, end))
+        estimated_nrg = area_under_curve(power_df["power"], method="rect")
 
+        logging.info("Looking at window {}".format((start, end)))
         logging.info("Expected energy: {} * {} = {} ".format(
             expected_power, (end - start), expected_nrg))
-        logging.info("Estimated energy: {}".format(area_under_curve(power_df["power"],
-                                                                    method="rect")))
+        logging.info("Expected util: {} ".format(expected_util))
+        logging.info("Estimated energy: {} (average {})".format(
+            estimated_nrg, estimated_nrg / (end - start)))
+
+        self.assertLess(estimated_nrg, expected_nrg * 1.4)
 
 class ForkMigration(EasTest):
     """
