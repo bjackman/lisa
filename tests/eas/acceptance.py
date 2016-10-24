@@ -194,7 +194,7 @@ class ManyTasksLowestEnergy(EasTest):
             return (phase.duty_cycle_pct * nrg_model.capacity_scale / 100.)
 
         capacities = {t: task_capacity(t) for t in tasks}
-        expected_power = nrg_model.estimate_workload_power(capacities)
+        expected_power, expected_util = nrg_model._find_optimal_placements(capacities)
 
         start, end = self.get_window(experiment)
         start = start + 0.2 # Allow first 200ms to be a mess

@@ -127,21 +127,35 @@ class TestMaxCap(TestCase):
 
 class TestEnergyEst(TestCase):
     def test_all_overutilized(self):
-        self.assertEqual(em.estimate_from_cpu_util([10000] * 4),
-                         400 * 2    # big CPU power
-                         + 200 * 2  # LITTLE CPU power
-                         + 40       # big cluster power
-                         + 20)      # LITTLE cluster power
+        big_cpu = 400 * 2
+        little_cpu =  200 * 2
+        big_cluster = 40
+        little_cluster = 20
+
+        total = big_cpu + little_cpu + big_cluster + little_cluster
+
+        power = em.estimate_from_cpu_util([10000] * 4)
+        exp = {
+            "power" : total,
+            (0): { "active": little_cpu, "idle": 0},
+            (1): { "active": little_cpu, "idle": 0},
+            (2): { "active": big_cpu, "idle": 0},
+            (3): { "active": big_cpu, "idle": 0},
+            (0, 1): { "active": little_cluster, "idle": 0},
+            (2, 3): { "active": big_cluster, "idle": 0}
+        }
+        for k, v in power.iteritems():
+            self.assertAlmostEqual(v, power[k])
 
     def test_all_idle(self):
-        self.assertEqual(em.estimate_from_cpu_util([0, 0, 0, 0]),
+        self.assertEqual(em.estimate_from_cpu_util([0, 0, 0, 0])["power"],
                          0 * 4 # CPU power = 0
                          + 2   # big cluster power
                          + 1)  # LITTLE cluster power
 
     def test_one_little_half_lowest(self):
         cpu0_util = 100 * 0.5
-        self.assertEqual(em.estimate_from_cpu_util([cpu0_util, 0, 0, 0]),
+        self.assertEqual(em.estimate_from_cpu_util([cpu0_util, 0, 0, 0])["power"],
                          (0.5 * 100)  # CPU0 active power
                          + (0.5 * 5)  # CPU0 idle power
                          + (0.5 * 5)  # LITTLE cluster idle power

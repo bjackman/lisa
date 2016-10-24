@@ -238,37 +238,56 @@ class EnergyModel(object):
         _, overutilized = self._guess_freqs(util_distrib)
         return overutilized
 
-    def _estimate_from_active_time(self, cpu_active_time, freqs, idle_states):
+    def _estimate_from_active_time(self, cpu_active_time, freqs, idle_states,
+                                   combine=False):
         power = 0
+
+        ret = {}
 
         for cpu, node in enumerate(self._levels["cpu"]):
             assert [cpu] == node.cpus
 
-            active_power = node.active_states[freqs[cpu]].power
-            idle_power = node.idle_states[idle_states[cpu]]
+            active_power = (node.active_states[freqs[cpu]].power
+                            * cpu_active_time[cpu])
+            idle_power = (node.idle_states[idle_states[cpu]]
+                          * (1 - cpu_active_time[cpu]))
 
-            power += (cpu_active_time[cpu] * active_power
-                      + ((1 - cpu_active_time[cpu]) * idle_power))
+            if combine:
+                ret[(cpu,)] = active_power + idle_power
+            else:
+                ret[(cpu,)] = {}
+                ret[(cpu,)]["active"] = active_power
+                ret[(cpu,)]["idle"] = idle_power
+
+            power += active_power + idle_power
 
         for node in self._levels["cluster"]:
-            cpus = node.cpus
+            cpus = tuple(node.cpus)
 
             # For now we assume clusters map to frequency domains 1:1
             freq = freqs[cpus[0]]
             assert all(freqs[c] == freq for c in cpus[1:])
-
-            active_power = node.active_states[freq].power
-            idle_power = max([node.idle_states[idle_states[c]] for c in cpus])
 
             # This works great for the synthetic periodic workloads we use in
             # Lisa (where all threads wake up at the same time) but is no good
             # for real workloads.
             active_time = max(cpu_active_time[c] for c in cpus)
 
-            power += (active_time * active_power
-                       + ((1 - active_time) * idle_power))
+            active_power = node.active_states[freq].power * active_time
+            idle_power = (max([node.idle_states[idle_states[c]] for c in cpus])
+                          * (1 - active_time))
 
-        return power
+            if combine:
+                ret[cpus] = active_power + idle_power
+            else:
+                ret[cpus] = {}
+                ret[cpus]["active"] = active_power
+                ret[cpus]["idle"] = idle_power
+
+            power += active_power + idle_power
+
+        ret["power"] = power
+        return ret
 
     def estimate_from_cpu_util(self, util_distrib, freqs=None, idle_states=None):
         if freqs is None:
@@ -306,25 +325,29 @@ class EnergyModel(object):
             "%14s - Searching %d configurations for optimal task placement...",
             "EnergyModel", num_candidates)
 
-        candidates = []
+        candidates = {}
         for cpus in product(self.cpus, repeat=len(tasks)):
             placement = {task: cpu for task, cpu in zip(tasks, cpus)}
 
             util = [0 for _ in self.cpus]
             for task, cpu in placement.items():
                 util[cpu] += capacities[task]
+            util = tuple(util)
 
-            power = self.estimate_from_cpu_util(util)
-            candidates.append((placement, power))
+            if util not in candidates:
+                freqs, overutilized = self._guess_freqs(util)
+                if not overutilized:
+                    power = self.estimate_from_cpu_util(util, freqs=freqs)
+                    candidates[util] = power
 
         # Whittle down to those that give the lowest energy estimate
-        min_power = min(e for p, e in candidates)
+        min_power = min(e["power"] for e in candidates.itervalues())
 
         logging.info("%14s - Done", "EnergyModel")
-        return min_power, [p for p, e in candidates if e == min_power]
+        return min_power, [u for u, e in candidates.iteritems() if e["power"] == min_power]
 
     def estimate_workload_power(self, capacities):
-        power, placements = self._find_optimal_placements(capacities)
+        power, utils = self._find_optimal_placements(capacities)
         return power
 
     def reconcile_freqs(self, freqs):
@@ -380,6 +403,10 @@ class EnergyModel(object):
                      for c, n in enumerate(self._levels["cpu"])}
         df.fillna({"idle": -1, "freq": max_freqs}, inplace=True)
 
+        cpu_columns = [(c,) for c in self.cpus]
+        cluster_columns = [tuple(n.cpus) for n in self._levels["cluster"]]
+        columns = ["power"] + cpu_columns + cluster_columns
+
         def row_power(row):
             # Pandas converts our numbers to floats so it can use NaN, convert
             # them back to ints.
@@ -414,8 +441,10 @@ class EnergyModel(object):
 
             power = self._estimate_from_active_time(util_distrib,
                                                     idle_states=idle_states,
-                                                    freqs=freqs)
-            return pd.Series([power], index=["power"])
+                                                    freqs=freqs,
+                                                    combine=True)
+
+            return pd.Series([power[k] for k in columns], index=columns)
 
         logging.info("%14s - Estimating energy from trace - %d events...",
                      "EnergyModel", len(df))
