@@ -282,7 +282,7 @@ class EnergyModel(object):
         for cpu, node in enumerate(self._levels["cpu"]):
             assert [cpu] == node.cpus
             cap = node.active_states[freqs[cpu]].capacity
-            cpu_active_time.append(min(util_distrib[cpu] / cap, 1.0))
+            cpu_active_time.append(min(float(util_distrib[cpu]) / cap, 1.0))
 
         return self._estimate_from_active_time(cpu_active_time,
                                                freqs, idle_states)
