@@ -116,6 +116,8 @@ class TestOptimalPlacement(TestCase):
         for placement in placements:
             self.assertTrue(all(cpu in [0, 1] for cpu in placement.values()))
 
+    # TODO test overutilized (should return nothing)
+
 class TestBiggestCpus(TestCase):
     def test_biggest_cpus(self):
         self.assertEqual(em.biggest_cpus, [2, 3])
