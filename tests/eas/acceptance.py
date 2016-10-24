@@ -198,14 +198,15 @@ class ManyTasksLowestEnergy(EasTest):
 
         start, end = self.get_window(experiment)
         expected_nrg = expected_power * (end - start)
-        logging.info("Expected energy: {} * {} = {} ".format(
-            expected_power, (end - start), expected_nrg))
 
         events = ["cpu_idle", "cpu_frequency"]
         trace = Trace(self.te.platform, experiment.out_dir, events)
 
         power_df = select_window(nrg_model.estimate_from_trace(trace),
                                  (start, end))
+
+        logging.info("Expected energy: {} * {} = {} ".format(
+            expected_power, (end - start), expected_nrg))
         logging.info("Estimated energy: {}".format(area_under_curve(power_df["power"],
                                                                     method="rect")))
 
