@@ -327,6 +327,29 @@ class EnergyModel(object):
         power, placements = self._find_optimal_placements(capacities)
         return power
 
+    def reconcile_freqs(self, freqs):
+        """Take a list of frequencies and make frequencies consistent in domains
+
+        Take a list of N frequencies where freqs[N] provides the frequency of
+        CPU N and return a version where whenever CPUs N and M share a frequency
+        domain, freqs[N] == freqs[M]. The order of preference for which
+        frequencies are changed to achieve this is unspecified.
+        """
+
+        if len(freqs) != len(self.cpus):
+            raise ValueError("Bad length for frequency list")
+        # We're going to mutate these lists so make copies (hence `list()`)
+        remaining_cpus = list(self.cpus)
+        freqs = list(freqs)
+        while remaining_cpus:
+            cpu = remaining_cpus[0]
+            freq_domain = self._levels["cpu"][cpu].freq_domain
+            for domain_cpu in freq_domain:
+                freqs[domain_cpu] = freqs[cpu]
+                remaining_cpus.remove(domain_cpu)
+
+        return freqs
+
     # TODO: We need a "power in state" function that takes a list of frequencies
     # and idle states and returns power, then use that function throughout.
 
@@ -382,10 +405,12 @@ class EnergyModel(object):
             idle_states = [n.idle_states.keys()[i] for n, i
                            in zip(self._levels["cpu"], idle_idxs)]
 
-            # TODO: AFAICT the kernel automatically traces the frequency of all
-            # CPUs in affected_cpus when a frequency is changed. Need to double
-            # check. If not, we can fix that here using our domain data.
-            freqs = [row["freq"][cpu] for cpu in self.cpus]
+            # Make frequency events consistent with HW frequency domains.
+            # Linux knows about frequency domains and will trace all the
+            # frequencies correctly, but the different CPU freqs are traced in
+            # different ftrace events, so there is a short period where the
+            # traced frequencies are inconsistent after a frequency change.
+            freqs = self.reconcile_freqs([row["freq"][cpu] for cpu in self.cpus])
 
             power = self._estimate_from_active_time(util_distrib,
                                                     idle_states=idle_states,
