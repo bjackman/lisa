@@ -215,7 +215,7 @@ class ManyTasksLowestEnergy(EasTest):
         logging.info("Estimated energy: {} (average {})".format(
             estimated_nrg, estimated_nrg / (end - start)))
 
-        self.assertLess(estimated_nrg, expected_nrg * 1.4)
+        self.assertLess(estimated_nrg, expected_nrg * 1.3)
 
 class ForkMigration(EasTest):
     """
