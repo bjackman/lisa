@@ -216,6 +216,10 @@ class ManyTasksLowestEnergy(EasTest):
         logging.info("Estimated energy: {} (average {})".format(
             estimated_nrg, estimated_nrg / (end - start)))
 
+        if estimated_nrg < expected_nrg:
+            # Uh-oh, something is wrong with our calculations
+            raise ValueError("Looks like >100% efficiency!")
+
         self.assertLess(estimated_nrg, expected_nrg * 1.3)
 
 class ForkMigration(EasTest):
