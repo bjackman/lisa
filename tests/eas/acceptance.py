@@ -28,6 +28,7 @@ from bart.sched.SchedAssert import SchedAssert
 from devlib.target import TargetError
 
 from env import TestEnv
+from perf_analysis import PerfAnalysis
 from test import LisaTest, experiment_test
 from trace import Trace
 
@@ -80,6 +81,23 @@ class EasTest(LisaTest):
                 self.te.nrg_model.biggest_cpus,
                 rank=len(tasks)),
             msg="Not all the new generated tasks started on a big CPU")
+
+    def _test_slack(self, experiment, tasks):
+        """Test that the RTApp workload was given enough performance"""
+
+        pa = PerfAnalysis(experiment.out_dir)
+        for task in tasks:
+            # Get a Pandas DataFrame which has a Slack column
+            df = pa.df(task)
+
+            # Allow a 100ms period at the beginning of the run for the cpufreq
+            # governor to respond
+            df = df[df.index > 0.1]
+
+            neg_slack_df = df[df["Slack"] < 0]
+            if len(neg_slack_df):
+                msg = "Neg slack at time {}".format(neg_slack_df.index[0])
+                self.assertTrue(neg_slack_df.empty, msg=msg)
 
 class SingleTaskLowestEnergy(EasTest):
     """
@@ -186,6 +204,10 @@ class ManyTasksLowestEnergy(EasTest):
     conf_basename = "many_tasks.config"
 
     @experiment_test
+    def test_slack(self, experiment, tasks):
+        self._test_slack(experiment, tasks)
+
+    @experiment_test
     def test_task_placement(self, experiment, tasks):
         nrg_model = self.te.nrg_model
 
@@ -217,8 +239,10 @@ class ManyTasksLowestEnergy(EasTest):
             estimated_nrg, estimated_nrg / (end - start)))
 
         if estimated_nrg < expected_nrg:
-            # Uh-oh, something is wrong with our calculations
-            raise ValueError("Looks like >100% efficiency!")
+            # Maybe we were _too_ efficient e.g. we packed more than 1024
+            # utilization onto a single core. Hopefully test_slack will fail.
+            logging.warning("Looks like >100% efficiency!")
+            logging.warning("Maybe we sacrificed throughput")
 
         self.assertLess(estimated_nrg, expected_nrg * 1.3)
 
