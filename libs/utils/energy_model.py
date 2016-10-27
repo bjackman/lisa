@@ -288,28 +288,29 @@ class EnergyModel(object):
     # faster with Ninjutsu
 
     def estimate_from_trace(self, trace):
-        # TODO all this DataFrame mangling makes Pandas complain; we might be
-        # aliasing things we shouldn't be.
-        idle_df = trace.ftrace.cpu_idle.data_frame
-        if idle_df.empty:
-            raise ValueError("No cpu_idle events found")
-        idle_df = idle_df.pivot(columns="cpu_id")["state"]
-        idle_df.fillna(method="ffill", inplace=True)
+        def get_df(event, cpu_field, data_field):
+            df = getattr(trace.ftrace, event).data_frame
+            df = df.pivot(columns=cpu_field).fillna(method="ffill")
+            return df[data_field]
 
-        freq_df = trace.ftrace.cpu_frequency.data_frame
-        if freq_df.empty:
-            raise ValueError("No cpu_frequency events found")
-        freq_df = freq_df.pivot(columns="cpu")["frequency"]
-        freq_df.fillna(method="ffill", inplace=True)
+        idle_df = get_df("cpu_idle", "cpu_id", "state")
+        freq_df = get_df("cpu_frequency", "cpu", "frequency")
 
         df = pd.concat([idle_df, freq_df], axis=1, keys=["idle", "freq"])
-        df.fillna(method="ffill", inplace=True)
+        df = df.fillna(method="ffill")
+
+        # The fillna call below causes a SettingWithCopyWarning which is
+        # spurious. Disable it, re-enable afterwards.
+        chained_assignment = pd.options.mode.chained_assignment
+        pd.options.mode.chained_assignment = None
 
         # Where we don't have the data (because no events arrived yet), fill it
         # in with worst-case.
         max_freqs = {c: max(n.active_states.keys())
                      for c, n in enumerate(self._levels["cpu"])}
-        df.fillna({"idle": -1, "freq": max_freqs}, inplace=True)
+        df = df.fillna({"idle": -1, "freq": max_freqs})
+
+        pd.options.mode.chained_assignment = chained_assignment
 
         cpu_columns = [(c,) for c in self.cpus]
         cluster_columns = [tuple(n.cpus) for n in self._levels["cluster"]]
