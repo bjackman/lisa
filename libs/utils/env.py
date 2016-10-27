@@ -28,6 +28,7 @@ import unittest
 import devlib
 
 import platforms.juno_energy
+import platforms.hikey_energy
 from wlgen import RTA
 from energy import EnergyMeter
 from conf import JsonConf
@@ -293,8 +294,6 @@ class TestEnv(ShareState):
         logging.info(r'%14s - Topology:', 'Target')
         logging.info(r'%14s -    %s', 'Target', CLUSTERS)
 
-        # self.nrg_model = EnergyModel(self.topology, self.target)
-
         # Initialize the platform descriptor
         self._init_platform()
 
@@ -392,6 +391,9 @@ class TestEnv(ShareState):
             self.__modules = ['bl', 'cpufreq']
 
         elif self.conf['board'] != 'UNKNOWN':
+            # TODO clean this whole board thing up
+            self.nrg_model = platforms.hikey_energy.hikey_energy
+
             # Initilize from platform descriptor (if available)
             board = self._load_board(self.conf['board'])
             if board:
