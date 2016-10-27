@@ -57,18 +57,19 @@ class EasTest(LisaTest):
     def _experimentsInit(cls, *args, **kwargs):
         super(EasTest, cls)._experimentsInit(*args, **kwargs)
 
+        # These settings don't exist on mainline-integration kernels, so don't
+        # worry if the file isn't present.
+        def maybe_write_value(path, val):
+            try:
+                cls.target.write_value(path, val)
+            except TargetError:
+                pass
+
         if SET_INITIAL_TASK_UTIL:
-            cls.target.write_value(
-                "/proc/sys/kernel/sched_initial_task_util", 1024)
+            maybe_write_value("/proc/sys/kernel/sched_initial_task_util", 1024)
 
         if SET_IS_BIG_LITTLE:
-            try:
-                cls.target.write_value(
-                    "/proc/sys/kernel/sched_is_big_little", 1)
-            except TargetError:
-                # That flag doesn't exist on mainline-integration kernels, so
-                # don't worry if the file isn't present.
-                pass
+            maybe_write_value("/proc/sys/kernel/sched_is_big_little", 1)
 
     def _do_test_first_cpu(self, experiment, tasks):
         """Test that all tasks start on a big CPU"""
