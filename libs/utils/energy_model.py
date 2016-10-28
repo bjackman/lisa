@@ -79,9 +79,9 @@ class EnergyModel(object):
     def get_level(self, level_name):
         return self._levels[level_name]
 
-    def _guess_idle_states(self, util_distrib):
+    def _guess_idle_states(self, cpus_active):
         def find_deepest(pd):
-            if not any(util_distrib[c] != 0 for c in pd.cpus):
+            if not any(cpus_active[c] != 0 for c in pd.cpus):
                 if pd.parent:
                     parent_state = find_deepest(pd.parent)
                     if parent_state:
@@ -96,13 +96,48 @@ class EnergyModel(object):
     # idxs is for "min" right? Maybe we can just get "shallowest", or even give
     # idle states a compare biz
 
-    def _guess_idle_idxs(self, util_distrib):
-        states = self._guess_idle_states(util_distrib)
+    def _guess_idle_idxs(self, cpus_active):
+        states = self._guess_idle_states(cpus_active)
         return [c.idle_state_idx(s) if s else -1
                 for s, c in zip(states, self._levels["cpu"])]
 
-    def guess_idle_states(self, util_distrib):
-        states = self._guess_idle_states(util_distrib)
+    def guess_idle_states(self, cpus_active):
+        """
+        Pessimistically guess the idle states that each CPU may enter
+
+        If a CPU has any tasks it is estimated that it may only enter its
+        shallowest idle state in between task activations. If all the CPUs
+        within a power domain have no tasks, they will all be judged able to
+        enter that domain's deepest idle state. If any CPU in a domain has work,
+        no CPUs in that domain are assumed to enter any domain shared state.
+
+        e.g. Consider a system with
+        - two power domains PD0 and PD1
+        - 4 CPUs, with CPUs [0, 1] in PD0 and CPUs [2, 3] in PD1
+        - 4 idle states: "WFI", "cpu-sleep", "cluster-sleep-0" and
+          "cluster-sleep-1"
+
+        Then here are some example inputs and outputs:
+
+        # All CPUs idle:
+        [0, 0, 0, 0] -> ["cluster-sleep-0", "cluster-sleep-0",
+                         "cluster-sleep-0", "cluster-sleep-0"]
+
+        # All CPUs have work
+        [1, 1, 1, 1] -> ["WFI","WFI","WFI", "WFI"]
+
+        # One power domain active, the other idle
+        [0, 0, 1, 1] -> ["cluster-sleep-1", "cluster-sleep-1", "WFI","WFI"]
+
+        # One CPU active.
+        # Note that CPU 2 has no work but is assumed to never be able to enter
+        # any "cluster" state.
+        [0, 0, 0, 1] -> ["cluster-sleep-1", "cpu-sleep", "WFI","WFI"]
+
+        :param cpus_active: list where cpus_active[N] is False iff no tasks will
+        run on CPU N.
+        """
+        states = self._guess_idle_states(cpus_active)
         return [s or c.idle_states.keys()[0]
                 for s, c in zip(states, self._levels["cpu"])]
 
