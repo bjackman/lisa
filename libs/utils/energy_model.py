@@ -357,6 +357,18 @@ class EnergyModel(object):
             return df[data_field]
 
         idle_df = get_df("cpu_idle", "cpu_id", "state")
+        # If there were no idle events at all on a CPU, assume it was deeply
+        # idle the whole time. This won't generally be true from a hardware
+        # perspective (due to shared idle states) but should be true from
+        # cpuidle's perspective.
+        # TODO we check what happens if there were no events for any CPU
+        #      (hopefully get_df fails)
+        for cpu, node in enumerate(self._levels["cpu"]):
+            if cpu not in idle_df.columns:
+                deepest_idx = len(node.idle_states) - 1
+                idle_df.loc[:, cpu] = pd.Series(
+                    (deepest_idx for _ in idle_df.index), index=idle_df.index)
+
         freq_df = get_df("cpu_frequency", "cpu", "frequency")
 
         df = pd.concat([idle_df, freq_df], axis=1, keys=["idle", "freq"])
