@@ -55,6 +55,15 @@ class EasTest(LisaTest):
         super(EasTest, cls)._init(conf_file, *args, **kwargs)
 
     @classmethod
+    def get_task_capacities(cls, experiment, tasks):
+        def task_cap(task):
+            # Must be a single-phase task
+            [phase] = experiment.wload.params["profile"][task]["phases"]
+            return (phase.duty_cycle_pct * cls.te.nrg_model.capacity_scale
+                    / 100.)
+        return {t: task_cap(t) for t in tasks}
+
+    @classmethod
     def _experimentsInit(cls, *args, **kwargs):
         super(EasTest, cls)._experimentsInit(*args, **kwargs)
 
@@ -218,18 +227,15 @@ class ManyTasksLowestEnergy(EasTest):
 
     @experiment_test
     def test_slack(self, experiment, tasks):
-        self._test_slack(experiment, tasks)
+        biggest_cap = max(self.get_task_capacities(experiment, tasks).values())
+        if (biggest_cap / self.te.nrg_model.capacity_scale) < 0.8:
+            self._test_slack(experiment, tasks)
 
     @experiment_test
     def test_task_placement(self, experiment, tasks):
         nrg_model = self.te.nrg_model
 
-        def task_capacity(task):
-            # Must be a single-phase task
-            [phase] = experiment.wload.params["profile"][task]["phases"]
-            return (phase.duty_cycle_pct * nrg_model.capacity_scale / 100.)
-
-        capacities = {t: task_capacity(t) for t in tasks}
+        capacities = self.get_task_capacities(experiment, tasks)
         expected_power, expected_util = nrg_model._find_optimal_placements(capacities)
 
         start, end = self.get_window(experiment)
