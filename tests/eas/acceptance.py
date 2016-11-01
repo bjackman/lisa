@@ -102,14 +102,15 @@ class EasTest(LisaTest):
             # Get a Pandas DataFrame which has a Slack column
             df = pa.df(task)
 
-            # Allow a 100ms period at the beginning of the run for the cpufreq
+            # Allow a 300ms period at the beginning of the run for the cpufreq
             # governor to respond
-            df = df[df.index > 0.1]
+            df = df[df.index > 0.3]
 
             neg_slack_df = df[df["Slack"] < 0]
-            if len(neg_slack_df):
-                msg = "Neg slack at time {}".format(neg_slack_df.index[0])
-                self.assertTrue(neg_slack_df.empty, msg=msg)
+            if not neg_slack_df.empty:
+                time = neg_slack_df.index[0] + self.get_start_time(experiment)
+                msg = "{}: negative slack at time {}".format(task, time)
+                raise AssertionError(msg)
 
 class SingleTaskLowestEnergy(EasTest):
     """
