@@ -389,30 +389,21 @@ class EnergyModel(object):
 
         cpu_columns = [(c,) for c in self.cpus]
         cluster_columns = [tuple(n.cpus) for n in self._levels["cluster"]]
-        columns = ["power"] + cpu_columns + cluster_columns
+        out_columns = ["power"] + cpu_columns + cluster_columns
 
         power_memo = {}
 
         def row_power(row):
-            # Pandas converts our numbers to floats so it can use NaN, convert
-            # them back to ints.
-            def to_int(i):
-                if pd.isnull(i):
-                    return -1
-                else:
-                    return int(i)
-
             # The energy estimation code eats and drinks CPU time with great
             # merriness and mirth, so don't call it more than necessary.
-            # `tuple(row)` is probably more fine-grained than necessary (so we
-            # miss some opportunities to memoize) but it's fast (presumably
-            # no-copy).
             memo_key = tuple(row)
-            if memo_key in power_memo:
+            try:
                 return power_memo[memo_key]
+            except KeyError:
+                pass
 
             # These are the states cpuidle thinks the CPUs are in
-            cpuidle_idxs = [to_int(i) for i in row["idle"].values]
+            cpuidle_idxs = [int(i) for i in row["idle"].values]
 
             # These are the deepest states the hardware could actually enter
             util_distrib = [int(s < 0) for s in cpuidle_idxs]
@@ -439,7 +430,7 @@ class EnergyModel(object):
                                                     freqs=freqs,
                                                     combine=True)
 
-            ret = pd.Series([power[k] for k in columns], index=columns)
+            ret = pd.Series([power[k] for k in out_columns], index=out_columns)
             power_memo[memo_key] = ret
             return ret
 
@@ -461,6 +452,7 @@ class EnergyModel(object):
         histogram.sort_index(inplace=True)
 
         return histogram
+
 def clusters_from_target(target):
     core_siblings_fmt = "/sys/devices/system/cpu/cpu{}/topology/core_siblings"
 
