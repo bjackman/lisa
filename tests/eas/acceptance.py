@@ -72,6 +72,18 @@ class EasTest(LisaTest):
         if SET_IS_BIG_LITTLE:
             maybe_write_value("/proc/sys/kernel/sched_is_big_little", 1)
 
+        if cls.target.os == "android":
+            # Stop all the system services that introduce noise
+            cls.target.execute("stop")
+
+    @classmethod
+    def _experimentsFinalize(cls, *args, **kwargs):
+        super(EasTest, cls)._experimentsFinalize(*args, **kwargs)
+
+        if cls.target.os == "android":
+            # Restart system services (assume we stopped them...)
+            cls.target.execute("start", as_root=True)
+
     def _do_test_first_cpu(self, experiment, tasks):
         """Test that all tasks start on a big CPU"""
         sched_assert = self.get_multi_assert(experiment)
