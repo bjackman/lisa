@@ -60,13 +60,23 @@ class PowerDomain(object):
         return "PowerDomain(cpus={})".format(list(self.cpus))
 
 class EnergyModel(object):
+    """
+    Represents hierarchical CPU topology with power and capacity data
+
+    Describes a CPU topology similarly to trappy's Topology class, additionally
+    describing relative CPU compute capacity, frequency domains and energy costs
+    in various configurations.
+
+    The topology is stored in "levels", currently hard-coded to be "cpu" and
+    "cluster". Each level is a list of EnergyModelNode objects. An EnergyModel
+    node is a CPU or group of CPUs with associated power and (optionally)
+    capacity characteristics.
+    """
+
+    # TODO check that inputs match this
     capacity_scale = 1024
 
-    def __init__(self, target=None, levels=None):
-
-        if target:
-            raise NotImplementedError()
-
+    def __init__(self, levels=None):
         self._levels = levels
 
         self.num_cpus = len(self._levels["cpu"])
@@ -102,8 +112,7 @@ class EnergyModel(object):
                 for s, c in zip(states, self._levels["cpu"])]
 
     def guess_idle_states(self, cpus_active):
-        """
-        Pessimistically guess the idle states that each CPU may enter
+        """Pessimistically guess the idle states that each CPU may enter
 
         If a CPU has any tasks it is estimated that it may only enter its
         shallowest idle state in between task activations. If all the CPUs
@@ -134,8 +143,8 @@ class EnergyModel(object):
         # any "cluster" state.
         [0, 0, 0, 1] -> ["cluster-sleep-1", "cpu-sleep", "WFI","WFI"]
 
-        :param cpus_active: list where cpus_active[N] is False iff no tasks will
-        run on CPU N.
+        :param cpus_active: list where bool(cpus_active[N]) is False iff no
+        tasks will run on CPU N.
         """
         states = self._guess_idle_states(cpus_active)
         return [s or c.idle_states.keys()[0]
@@ -143,6 +152,9 @@ class EnergyModel(object):
 
     def _guess_freqs(self, util_distrib):
         overutilized = False
+
+        # TODO would be simpler to iter over domains and set all CPUs. Need to
+        # store the set of domains somewhere.
 
         # Find what frequency each CPU would need if it was alone in its
         # frequency domain
@@ -173,6 +185,22 @@ class EnergyModel(object):
         return freqs, overutilized
 
     def guess_freqs(self, util_distrib):
+        """
+        Work out CPU frequencies required to execute a workload
+
+        The input is a list where util_distrib[N] is the sum of the
+        frequency-invariant, capacity-invariant utilization of tasks placed CPU
+        N. That is, the quantity represented by util_avg in the Linux kernel's
+        per-entity load-tracking (PELT) system.
+
+        The range of utilization values is 0 - EnergyModel.capacity_scale, where
+        EnergyModel.capacity_scale represents the computational capacity of the
+        most powerful CPU at its highest available frequency.
+
+        This function returns the lowest possible frequency for each CPU that
+        provides enough capacity to satisfy the utilization, taking into account
+        frequency domains.
+        """
         freqs, _ = self._guess_freqs(util_distrib)
         return freqs
 
