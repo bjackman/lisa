@@ -98,6 +98,14 @@ class LisaTest(unittest.TestCase):
         """
         Code executed before running the experiments
         """
+        if cls.target.os == "android":
+            # For Android targets we need root to do pretty much
+            # anything. Rather than pepper as_root everywhere let's just require
+            # "global" root, then on Linux targets we can use as_root only where
+            # necesssry.
+            if not cls.target.connected_as_root:
+                raise Exception("Need general root for Android targets. "
+                                "Run `adb root`")
 
     @classmethod
     def _experimentsFinalize(cls):
