@@ -33,6 +33,7 @@ from trappy.stats.Topology import Topology
 from wlgen import RTA
 from energy import EnergyMeter
 from conf import JsonConf
+from platforms.juno_energy import juno_energy
 
 USERNAME_DEFAULT = 'root'
 PASSWORD_DEFAULT = ''
@@ -370,6 +371,7 @@ class TestEnv(ShareState):
         # Initialize JUNO board
         elif self.conf['board'].upper() in ('JUNO', 'JUNO2'):
             platform = devlib.platform.arm.Juno()
+            self.nrg_model = juno_energy
             self.__modules = ['bl', 'hwmon', 'cpufreq']
 
         # Initialize OAK board
