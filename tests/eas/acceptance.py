@@ -16,17 +16,21 @@
 #
 
 import json
+import logging
 import operator
 import os
 import trappy
 import unittest
 
+from bart.common.Utils import area_under_curve, select_window
 from bart.sched.SchedAssert import SchedAssert
 
 from devlib.target import TargetError
 
 from env import TestEnv
+from perf_analysis import PerfAnalysis
 from test import LisaTest, experiment_test
+from trace import Trace
 
 # Read the config file and update the globals
 CONF_FILE = os.path.join(
@@ -51,6 +55,21 @@ class EasTest(LisaTest):
         super(EasTest, cls)._init(conf_file, *args, **kwargs)
 
     @classmethod
+    def get_task_utils(cls, experiment):
+        """
+        Return a dict mapping tasks in an experiment to their utilization
+
+        Only works for single-phase RTApp tasks
+        """
+        params = experiment.wload.params["profile"]
+        cap_scale = cls.te.nrg_model.capacity_scale
+        def task_cap(task):
+            # Must be a single-phase task
+            [phase] = params[task]["phases"]
+            return (phase.duty_cycle_pct * cap_scale / 100.)
+        return {t: task_cap(t) for t in params}
+
+    @classmethod
     def _experimentsInit(cls, *args, **kwargs):
         super(EasTest, cls)._experimentsInit(*args, **kwargs)
 
@@ -73,6 +92,24 @@ class EasTest(LisaTest):
                 self.te.nrg_model.biggest_cpus,
                 rank=len(tasks)),
             msg="Not all the new generated tasks started on a big CPU")
+
+    def _test_slack(self, experiment, tasks):
+        """Test that the RTApp workload was given enough performance"""
+
+        pa = PerfAnalysis(experiment.out_dir)
+        for task in tasks:
+            # Get a Pandas DataFrame which has a Slack column
+            slack = pa.df(task)["Slack"]
+
+            # Allow a 300ms period at the beginning of the run for the cpufreq
+            # governor to respond
+            # slack = slack[df.index > 0.3]
+
+            activations = len(slack)
+            bad_activations = len(slack[slack < 0])
+            if float(bad_activations) / activations > 0.01:
+                raise AssertionError("task {} missed {}/{} activations".format(
+                    task, bad_activations, activations))
 
 class SingleTaskLowestEnergy(EasTest):
     """
@@ -156,6 +193,67 @@ class SingleTaskLowestEnergy(EasTest):
                 rank=len(tasks)),
             msg="Task didn't run for {}% of its time on cpus {}".format(
                 EXPECTED_RESIDENCY_PCT, cpus))
+
+class ManyTasksLowestEnergy(EasTest):
+    """
+    Goal
+    ====
+
+    The arrangement of an arbitrary set of tasks is the most energy efficient.
+
+    Detailed Description
+    ====================
+
+    Take a single stage workload and search for the most energy-efficient task
+    placements for that workload.
+
+    Expected Behaviour
+    ==================
+
+    The tasks were placed according to one of the optimal placements.
+    """
+
+    conf_basename = "many_tasks.config"
+
+    @experiment_test
+    def test_slack(self, experiment, tasks):
+        biggest_cap = max(self.get_task_utils(experiment, tasks).values())
+        if (biggest_cap / self.te.nrg_model.capacity_scale) < 0.8:
+            self._test_slack(experiment, tasks)
+
+    @experiment_test
+    def test_task_placement(self, experiment, tasks):
+        nrg_model = self.te.nrg_model
+
+        capacities = self.get_task_utils(experiment, tasks)
+        expected_power, expected_util = nrg_model._find_optimal_placements(capacities)
+
+        start, end = self.get_window(experiment)
+        # Allow 400ms to for the system to "settle"
+        start = start + 0.4
+        expected_nrg = expected_power * (end - start)
+
+        events = ["cpu_idle", "cpu_frequency"]
+        trace = Trace(self.te.platform, experiment.out_dir, events)
+
+        power_df = select_window(nrg_model.estimate_from_trace(trace),
+                                 (start, end))
+        estimated_nrg = area_under_curve(power_df["power"], method="rect")
+
+        logging.info("Looking at window {}".format((start, end)))
+        logging.info("Expected energy: {} * {} = {} ".format(
+            expected_power, (end - start), expected_nrg))
+        logging.info("Expected util: {} ".format(expected_util))
+        logging.info("Estimated energy: {} (average {})".format(
+            estimated_nrg, estimated_nrg / (end - start)))
+
+        if estimated_nrg < expected_nrg:
+            # Maybe we were _too_ efficient e.g. we packed more than 1024
+            # utilization onto a single core. Hopefully test_slack will fail.
+            logging.warning("Looks like >100% efficiency!")
+            logging.warning("Maybe we sacrificed throughput")
+
+        self.assertLess(estimated_nrg, expected_nrg * 1.3)
 
 class ForkMigration(EasTest):
     """
