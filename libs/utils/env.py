@@ -34,6 +34,7 @@ from wlgen import RTA
 from energy import EnergyMeter
 from conf import JsonConf
 from platforms.juno_energy import juno_energy
+from platforms.hikey_energy import hikey_energy
 
 USERNAME_DEFAULT = 'root'
 PASSWORD_DEFAULT = ''
@@ -378,6 +379,12 @@ class TestEnv(ShareState):
         elif self.conf['board'].upper() == 'OAK':
             platform = Platform(model='MT8173')
             self.__modules = ['bl', 'cpufreq']
+
+
+        elif self.conf['board'].upper() == 'HIKEY':
+            self.nrg_model = hikey_energy
+            self.__modules = [ "cpufreq", "cpuidle" ]
+            platform = Platform(model='hikey')
 
         elif self.conf['board'] != 'UNKNOWN':
             # Initilize from platform descriptor (if available)
