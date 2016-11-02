@@ -98,12 +98,27 @@ class LisaTest(unittest.TestCase):
         """
         Code executed before running the experiments
         """
+        if cls.target.os == "android":
+            # For Android targets we need root to do pretty much
+            # anything. Rather than pepper as_root everywhere let's just require
+            # "global" root, then on Linux targets we can use as_root only where
+            # necesssary.
+            if not cls.target.connected_as_root:
+                raise Exception("Need general root for Android targets. "
+                                "Run `adb root`")
 
     @classmethod
     def _experimentsFinalize(cls):
         """
         Code executed after running the experiments
         """
+
+    @memoized
+    def get_sched_assert(self, experiment, task):
+        """
+        Return a SchedAssert over the task provided
+        """
+        return SchedAssert(experiment.out_dir, self.te.topology, execname=task)
 
     @memoized
     def get_multi_assert(self, experiment, task_filter=""):
@@ -124,6 +139,16 @@ class LisaTest(unittest.TestCase):
         """
         start_times_dict = self.get_multi_assert(experiment).getStartTime()
         return min([t["starttime"] for t in start_times_dict.itervalues()])
+
+    def get_end_time(self, experiment):
+        """
+        Get the time at which the experiment workload finished executing
+        """
+        end_times_dict = self.get_multi_assert(experiment).getEndTime()
+        return max([t["endtime"] for t in end_times_dict.itervalues()])
+
+    def get_window(self, experiment):
+        return (self.get_start_time(experiment), self.get_end_time(experiment))
 
     def get_end_times(self, experiment):
         """
