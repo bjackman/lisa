@@ -109,17 +109,17 @@ class EasTest(LisaTest):
         pa = PerfAnalysis(experiment.out_dir)
         for task in tasks:
             # Get a Pandas DataFrame which has a Slack column
-            df = pa.df(task)
+            slack = pa.df(task)["Slack"]
 
             # Allow a 300ms period at the beginning of the run for the cpufreq
             # governor to respond
-            df = df[df.index > 0.3]
+            # slack = slack[df.index > 0.3]
 
-            neg_slack_df = df[df["Slack"] < 0]
-            if not neg_slack_df.empty:
-                time = neg_slack_df.index[0] + self.get_start_time(experiment)
-                msg = "{}: negative slack at time {}".format(task, time)
-                raise AssertionError(msg)
+            activations = len(slack)
+            bad_activations = len(slack[slack < 0])
+            if float(bad_activations) / activations > 0.01:
+                raise AssertionError("task {} missed {}/{} activations".format(
+                    task, bad_activations, activations))
 
 class SingleTaskLowestEnergy(EasTest):
     """
