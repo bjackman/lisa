@@ -174,6 +174,11 @@ def experiment_test(wrapped_test, instance, args, kwargs):
     The method will be passed the experiment object and a list of the names of
     tasks that were run as the experiment's workload.
     """
+
+    # TODO calling directly into each test is not ideal as it means we only see
+    # one test being run for all experiments. Instead we should use subTest
+    # (requires upgrading to unittest2 or Python 3.4) or something else.
+
     for experiment in instance.executor.experiments:
         tasks = experiment.wload.tasks.keys()
         try:
