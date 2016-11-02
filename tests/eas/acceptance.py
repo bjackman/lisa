@@ -74,6 +74,89 @@ class EasTest(LisaTest):
                 rank=len(tasks)),
             msg="Not all the new generated tasks started on a big CPU")
 
+class SingleTaskLowestEnergy(EasTest):
+    """
+    Goal
+    ====
+
+    Check that a lone task in the system is placed according to the lowest
+    energy cost.
+
+    Detailed Description
+    ====================
+
+    Run workloads that consist of a single task, assuming the other load on the
+    system is negligible, and that no other configuration, such as boosting with
+    schedtune, has been done.
+
+
+    Expected Behaviour
+    ==================
+
+    Ths single task should be placed on the CPU/OPP combination that uses the
+    least energy without exceeding a certain utilization level on the CPU.
+
+    """
+
+    conf_basename = "single_task.config"
+
+    @experiment_test
+    def test_first_cpu(self, experiment, tasks):
+        """Fork Migration: Test First CPU"""
+        self._do_test_first_cpu(experiment, tasks)
+
+    @experiment_test
+    def test_task_placement(self, experiment, tasks):
+        [task] = tasks
+
+        nrg_model = self.te.nrg_model
+
+        [phase] = experiment.wload.params["profile"][task]["phases"]
+        required_cap = (phase.duty_cycle_pct / 100.
+                        * (100 + TASK_CAPACITY_MARGIN_PCT) / 100.
+                        * nrg_model.capacity_scale)
+
+        # Get potential task placements and energy for each
+        candidates = []
+        for cpu in range(nrg_model.num_cpus):
+            util_distrib = [0] * nrg_model.num_cpus
+            util_distrib[cpu] = required_cap
+            if nrg_model.would_overutilize(util_distrib):
+                continue
+            else:
+                nrg = nrg_model.estimate_from_cpu_util(util_distrib)
+                candidates.append((cpu, nrg))
+
+        min_nrg = min(c[1] for c in candidates)
+
+        # Whittle candidates to those that use the lease energy
+        cpus = [c[0] for c in candidates if c[1] == min_nrg]
+
+        # TODO: The above should work for any energy/capacity model/topology,
+        # however Sched[Multi]Assert.assertResidency only works for individual
+        # CPUs or topological clusters. So from here on out we're going to have
+        # to assume that CPUs within clusters are all the same, in which case
+        # `cpus` must represent the union of a set of clusters. For now we'll
+        # also assume that that is exactly one cluster.
+        # If necessary we can remove those assumptions by making assertResidency
+        # or a version thereof work for arbitrary sets of CPUs.
+        if cpus not in self.te.topology.get_level("cluster"):
+            raise ValueError("Topology clusters must be homogenous")
+
+        logging.info("Task {} should run on cpus {}".format(task, cpus))
+
+        sched_assert = self.get_multi_assert(experiment)
+        self.assertTrue(
+            sched_assert.assertResidency(
+                "cluster",
+                cpus,
+                phase.duty_cycle_pct * EXPECTED_RESIDENCY_PCT / 100,
+                operator.ge,
+                percent=True,
+                rank=len(tasks)),
+            msg="Task didn't run for {}% of its time on cpus {}".format(
+                EXPECTED_RESIDENCY_PCT, cpus))
+
 class ForkMigration(EasTest):
     """
     Goal
