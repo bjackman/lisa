@@ -452,3 +452,117 @@ class EnergyModel(object):
         histogram.sort_index(inplace=True)
 
         return histogram
+
+def clusters_from_target(target):
+    core_siblings_fmt = "/sys/devices/system/cpu/cpu{}/topology/core_siblings"
+
+    cpus = range(len(target.cpuinfo.cpu_names))
+    clusters = set()
+    for cpu in cpus:
+        core_siblings_path = core_siblings_fmt.format(cpu)
+        int_hex = lambda x: int(x, 16)
+        core_siblings_int = target.read_value(core_siblings_path, kind=int_hex)
+        siblings = tuple([c for c in cpus if bool(core_siblings_int & 1 << c)])
+
+        clusters.add(siblings)
+
+    return clusters
+
+def get_from_target(target, power_domains=[],
+                    clusters=None, cluster_idle_states=None):
+    if clusters is None:
+        clusters = clusters_from_target(target)
+
+    if cluster_idle_states:
+        power_domains = [PowerDomain(idle_states=cluster_idle_states,
+                                     parent=None,
+                                     cpus=cpus) for cpus in clusters]
+
+    sched_domain_path = "/proc/sys/kernel/sched_domain/"
+
+    # Check there's an "MC" sched_domain_topology_level and it's the bottom.
+    domain0_name_path = sched_domain_path + "/cpu0/domain0/name"
+    domain0_name = target.read_value(domain0_name_path)
+    if domain0_name != "MC":
+        # Probably CONFIG_SCHED_MC is disabled on the target or there's an
+        # SMT sched_domain. This won't work in either of those situations.
+        raise TargetError(
+            "The lowest sched_domain is {}, not 'MC'".format(domain0_name))
+
+    # Currently hard-coded for two levels, "cpu" and "cluster", but should
+    # in theory be extensible to arbitrary depth.
+    levels = {"cpu": [], "cluster": []}
+    freq_domains = []
+
+    # Assume a CPU always occurs in its own group 0
+    nrg_dir_fmt = "{}/cpu{{}}/domain{{}}/group0/energy/".format(
+        sched_domain_path)
+
+    def parse_active_states(cpu, sched_domain):
+        path = nrg_dir_fmt.format(cpu, sched_domain) + "cap_states"
+        vals = [int(v) for v in target.read_value(path).split()]
+        # cap_states file is a list of (capacity, power) pairs
+        cap_states = [ActiveState(c, p)
+                        for c, p in zip(vals[::2], vals[1::2])]
+
+        freqs = target.cpufreq.list_frequencies(cpu)
+
+        assert sorted(cap_states, key=lambda s: s.capacity) == cap_states
+        assert sorted(freqs) == freqs
+        assert len(freqs) == len(cap_states)
+
+        return OrderedDict([(freq, state) for freq, state
+                            in zip(freqs, cap_states)])
+
+    def parse_idle_states(cpu, domain):
+        state_names = [s.name for s in target.cpuidle.get_states(cpu)]
+
+        # cpuidle sysfs has a "power" member but it isn't initialized, use
+        # the sched_group_energy data to get idle state power usage.
+        path = nrg_dir_fmt.format(cpu, domain) + "idle_states"
+        _power_nums = [int(v) for v in target.read_value(path).split()]
+        # The first entry in the idle_states array is an implementation
+        # detail
+        power_nums = _power_nums[1:]
+
+        assert len(power_nums) == len(state_names)
+
+        return OrderedDict([(n, p) for n, p in zip(state_names, power_nums)])
+
+    for cpus in clusters:
+        cpu = cpus[0]
+
+        #
+        # Read CPU level data for this cluster
+        #
+
+        # To save time, for now we'll assume that all CPUs in the cluster
+        # have the same idle and active states
+        active_states = parse_active_states(cpu, 0)
+        idle_states = parse_idle_states(cpu, 0)
+
+        for cpu in cpus:
+            [cluster_pd] = [pd for pd in power_domains if cpu in pd.cpus]
+            cpu_states = [s for s in idle_states.keys()
+                          if s not in cluster_pd.idle_states]
+            cpu_pd = PowerDomain(cpus=[cpu], idle_states=idle_states,
+                                 parent=cluster_pd)
+
+            freq_domain = target.cpufreq.get_domain_cpus(cpu)
+            print cpu, freq_domain
+            node = EnergyModelNode([cpu], active_states, idle_states,
+                                   power_domain=cpu_pd, freq_domain=freq_domain)
+            levels["cpu"].append(node)
+
+
+        #
+        # Read cluster-level data
+        #
+
+        active_states = parse_active_states(cpu, 1)
+        idle_states = parse_idle_states(cpu, 1)
+
+        node = EnergyModelNode(cpus, active_states, idle_states)
+        levels["cluster"].append(node)
+
+    return EnergyModel(levels=levels)
