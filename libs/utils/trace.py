@@ -397,7 +397,7 @@ class Trace(object):
         return [self._tasks_by_pid.ix[pid].values[0]]
 
     def getTasks(self, dataframe=None,
-                 task_names=None, name_key='comm', pid_key='pid'):
+                 task_names=None, name_key='__comm', pid_key='__pid'):
         """
         Helper function to get PIDs of specified tasks.
 
