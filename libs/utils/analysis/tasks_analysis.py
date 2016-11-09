@@ -182,6 +182,37 @@ class TasksAnalysis(AnalysisModule):
 
         return rt_tasks
 
+    def getTaskSignal(self, task, signal):
+        """
+        Get a Series showing a sched_load_avg_task signal for a given task.
+
+        :param task: The task name or PID to examine. If task name, must be
+            unique, i.e. only one matching PID
+        :type tasks: str or int
+
+        :param signal: Signal to examine. Of the form "event:signal"
+            for example "sched_load_avg_task:util_avg"
+        :type signal: str
+        """
+
+        if type(task) == int:
+            pid = task
+        else:
+            pids = self._trace.getTaskByName(task)
+            if not pids:
+                raise ValueError('Task "{}" not found in trace'.format(task))
+            if len(pids) > 1:
+                raise ValueError('Task name "{}" not unique'.format(task))
+            [pid] = pids
+
+        event, signal = signal.split(':')
+
+        df = self._dfg_trace_event(event)
+        try:
+            return df[df['__pid'] == pid][signal]
+        except KeyError:
+            raise ValueError(
+                'Event "{}" has no field "{}"'.format(event, signal))
 
 ###############################################################################
 # Plotting Methods
