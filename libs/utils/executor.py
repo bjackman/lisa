@@ -47,6 +47,7 @@ Experiment = namedtuple('Experiment', ['wload_name', 'wload',
 
 class Executor():
 
+    # TODO rename tests_conf to experiments_conf
     def __init__(self, test_env, tests_conf=None):
         """
         Tests Executor
