@@ -403,26 +403,24 @@ class Trace(object):
         """
         Helper function to get PIDs of specified tasks.
 
-        This method requires a Pandas dataset in input to be used to fiter out
+        This method can take a Pandas dataset in input to be used to fiter out
         the PIDs of all the specified tasks. If a dataset is not provided,
-        previously filtered PIDs are returned.
+        all PIDs found in the trace are returned.
 
-        If a list of task names is not provided, the workload defined task
-        names is used instead. The specified dataframe must provide at least
-        two columns reporting the task name and the task PID. The default
-        values of this colums could be specified using the provided parameters.
+        If a list of task names is not provided, all tasks detected in the trace
+        will be used. The specified dataframe must provide at least two columns
+        reporting the task name and the task PID. The default values of this
+        colums could be specified using the provided parameters.
 
-        :param dataframe: A Pandas datafram containing at least 'pid' and
-            'task name' columns. If None, the previously filtered PIDs are
-            returned.
+        :param dataframe: A Pandas datafram containing at least 'name_key' and
+            'pid_key' columns. If None, the all PIDs are returned.
         :type dataframe: :mod:`pandas.DataFrame`
 
-        :param task_names: The list of tasks to get the PID of (by default the
-            workload defined tasks)
+        :param task_names: The list of tasks to get the PID of (default: all
+            tasks)
         :type task_names: list(str)
 
-        :param name_key: The name of the dataframe columns containing task
-            names
+        :param name_key: The name of the dataframe columns containing task names
         :type name_key: str
 
         :param pid_key: The name of the dataframe columns containing task PIDs
@@ -448,8 +446,8 @@ class Trace(object):
                 self.tasks[tname] = {}
             pids = list(results[pid_key].unique())
             self.tasks[tname]['pid'] = pids
-            logging.info('  task %16s found, pid: %s',
-                         tname, self.tasks[tname]['pid'])
+            logging.debug('  task %16s found, pid: %s',
+                          tname, self.tasks[tname]['pid'])
         return self.tasks
 
     def _populate_tasks(self):
