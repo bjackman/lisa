@@ -15,11 +15,13 @@
 # limitations under the License.
 #
 
+import logging
 import unittest
 
 from bart.common.Utils import select_window
 from devlib.target import TargetError
 from devlib.utils.misc import memoized
+from trappy.stats.grammar import Parser
 
 from env import TestEnv
 from test import LisaTest, experiment_test
@@ -122,8 +124,9 @@ class PeltSmokeTest(LisaTest):
         # Ignore an initial period for the signal to settle
         window = (wload_start + self.util_avg_convergence_time, wload_end)
 
-        tasks_analysis = trace.analysis.tasks
-        util_avg_all = tasks_analysis.get_task_signal(task, "util_avg")
+        [pid] = trace.getTaskByName(task)
+        parser = Parser(trace.ftrace, filters={"pid": pid})
+        util_avg_all = parser.solve("sched_load_avg_task:util_avg")[pid]
         util_avg = select_window(util_avg_all, self.get_window(experiment))
 
         error_margin = exp_util * 0.03
