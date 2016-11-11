@@ -45,10 +45,16 @@ class LisaTest(unittest.TestCase):
         cls._runExperiments()
 
     @classmethod
-    def _getTestConf(cls, test_env):
-        if not hasattr(cls, "conf"):
-            raise NotImplementedError("Please add `conf` attribute")
-        return cls.conf
+    def _getTestConf(cls):
+        if not hasattr(cls, "test_conf"):
+            raise NotImplementedError("Please add `test_conf` attribute")
+        return cls.test_conf
+
+    @classmethod
+    def _getExperimentsConf(cls, test_env):
+        if not hasattr(cls, "experiments_conf"):
+            raise NotImplementedError("Please add `experiments_conf` attribute")
+        return cls.experiments_conf
 
     @classmethod
     def _runExperiments(cls):
@@ -57,10 +63,10 @@ class LisaTest(unittest.TestCase):
         """
 
         cls.logger.info("%14s - Setup tests execution engine...", "LisaTest")
-        test_env = TestEnv()
-        conf = cls._getTestConf(test_env)
+        test_env = TestEnv(test_conf=cls._getTestConf())
 
-        cls.executor = Executor(test_env, tests_conf=conf));
+        exp_conf = cls._getExperimentsConf(test_env)
+        cls.executor = Executor(test_env, tests_conf=exp_conf)
 
         # Alias executor objects to make less verbose tests code
         cls.te = cls.executor.te
