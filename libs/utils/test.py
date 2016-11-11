@@ -31,7 +31,7 @@ class LisaTest(unittest.TestCase):
     """A base class for LISA defined tests"""
 
     @classmethod
-    def _init(cls, conf, *args, **kwargs):
+    def _init(cls, *args, **kwargs):
         """
         Base class to run LISA test experiments
         """
@@ -42,9 +42,13 @@ class LisaTest(unittest.TestCase):
             cls.logger.setLevel(kwargs['loglevel'])
             kwargs.pop('loglevel')
 
-        cls.conf = conf
-
         cls._runExperiments()
+
+    @classmethod
+    def _getTestConf(cls, test_env):
+        if not hasattr(cls, "conf"):
+            raise NotImplementedError("Please add `conf` attribute")
+        return cls.conf
 
     @classmethod
     def _runExperiments(cls):
@@ -54,8 +58,9 @@ class LisaTest(unittest.TestCase):
 
         cls.logger.info("%14s - Setup tests execution engine...", "LisaTest")
         test_env = TestEnv()
+        conf = cls._getTestConf(test_env)
 
-        cls.executor = Executor(test_env, tests_conf=cls.conf);
+        cls.executor = Executor(test_env, tests_conf=conf));
 
         # Alias executor objects to make less verbose tests code
         cls.te = cls.executor.te
