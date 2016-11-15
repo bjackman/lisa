@@ -20,6 +20,7 @@ import operator
 import os
 import trappy
 import unittest
+from unittest import SkipTest
 
 from bart.sched.SchedAssert import SchedAssert
 
@@ -66,9 +67,19 @@ class EasTest(LisaTest):
         },
     }
 
+    # Most of the tests for EAS are only applicable on heterogeneous systems.
+    # For exceptions to that rule, set this flag to False.
+    skip_on_smp = True
+
     @classmethod
     def setUpClass(cls, *args, **kwargs):
         super(EasTest, cls)._init(*args, **kwargs)
+
+    @classmethod
+    def _getExperimentsConf(cls, test_env):
+        if cls.skip_on_smp and not test_env.nrg_model.is_heterogeneous:
+            raise SkipTest("Test not required on symmetric systems")
+        return super(EasTest, cls)._getExperimentsConf(test_env)
 
     @classmethod
     def _experimentsInit(cls, *args, **kwargs):
@@ -185,6 +196,8 @@ class SmallTaskPacking(EasTest):
         },
         "confs" : [energy_aware_conf]
     }
+
+    skip_on_smp = False
 
     @experiment_test
     def test_first_cpu(self, experiment, tasks):
