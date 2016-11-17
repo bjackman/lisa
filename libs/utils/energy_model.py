@@ -327,4 +327,34 @@ class EnergyModel(object):
 
         return self._estimate_from_active_time(cpu_active_time,
                                                freqs, idle_states, combine)
-======= end
+
+    # TODO this takes exponential time, we can almost certainly avoid that.
+    # TODO clean up interface and document
+    def _find_optimal_placements(self, capacities):
+        tasks = capacities.keys()
+
+        num_candidates = len(self.cpus) ** len(tasks)
+        logging.info(
+            "%14s - Searching %d configurations for optimal task placement...",
+            "EnergyModel", num_candidates)
+
+        candidates = {}
+        for cpus in product(self.cpus, repeat=len(tasks)):
+            placement = {task: cpu for task, cpu in zip(tasks, cpus)}
+
+            util = [0 for _ in self.cpus]
+            for task, cpu in placement.items():
+                util[cpu] += capacities[task]
+            util = tuple(util)
+
+            if util not in candidates:
+                freqs, overutilized = self._guess_freqs(util)
+                if not overutilized:
+                    power = self.estimate_from_cpu_util(util, freqs=freqs)
+                    candidates[util] = power
+
+        # Whittle down to those that give the lowest energy estimate
+        min_power = min(e["power"] for e in candidates.itervalues())
+
+        logging.info("%14s - Done", "EnergyModel")
+        return min_power, [u for u, e in candidates.iteritems() if e["power"] == min_power]
