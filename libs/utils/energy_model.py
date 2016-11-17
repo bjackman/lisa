@@ -145,3 +145,186 @@ class EnergyModel(object):
         """
         states = self.cpu_nodes[0].active_states
         return any(c.active_states != states for c in self.cpu_nodes[1:])
+
+    def _guess_idle_states(self, cpus_active):
+        def find_deepest(pd):
+            if not any(cpus_active[c] for c in pd.cpus):
+                if pd.parent:
+                    parent_state = find_deepest(pd.parent)
+                    if parent_state:
+                        return parent_state
+                return pd.idle_states[-1] if len(pd.idle_states) else None
+            return None
+
+        return [find_deepest(c.power_domain) for c in self._levels["cpu"]]
+
+    def guess_idle_states(self, cpus_active):
+        """Pessimistically guess the idle states that each CPU may enter
+
+        If a CPU has any tasks it is estimated that it may only enter its
+        shallowest idle state in between task activations. If all the CPUs
+        within a power domain have no tasks, they will all be judged able to
+        enter that domain's deepest idle state. If any CPU in a domain has work,
+        no CPUs in that domain are assumed to enter any domain shared state.
+
+        e.g. Consider a system with
+        - two power domains PD0 and PD1
+        - 4 CPUs, with CPUs [0, 1] in PD0 and CPUs [2, 3] in PD1
+        - 4 idle states: "WFI", "cpu-sleep", "cluster-sleep-0" and
+          "cluster-sleep-1"
+
+        Then here are some example inputs and outputs:
+
+        # All CPUs idle:
+        [0, 0, 0, 0] -> ["cluster-sleep-0", "cluster-sleep-0",
+                         "cluster-sleep-0", "cluster-sleep-0"]
+
+        # All CPUs have work
+        [1, 1, 1, 1] -> ["WFI","WFI","WFI", "WFI"]
+
+        # One power domain active, the other idle
+        [0, 0, 1, 1] -> ["cluster-sleep-1", "cluster-sleep-1", "WFI","WFI"]
+
+        # One CPU active.
+        # Note that CPU 2 has no work but is assumed to never be able to enter
+        # any "cluster" state.
+        [0, 0, 0, 1] -> ["cluster-sleep-1", "cpu-sleep", "WFI","WFI"]
+
+        :param cpus_active: list where bool(cpus_active[N]) is False iff no
+        tasks will run on CPU N.
+        """
+        states = self._guess_idle_states(cpus_active)
+        return [s or c.idle_states.keys()[0]
+                for s, c in zip(states, self._levels["cpu"])]
+
+    def _guess_freqs(self, util_distrib):
+        overutilized = False
+
+        # TODO would be simpler to iter over domains and set all CPUs. Need to
+        # store the set of domains somewhere.
+
+        # Find what frequency each CPU would need if it was alone in its
+        # frequency domain
+        ideal_freqs = [0 for _ in range(self.num_cpus)]
+        for node in self._levels["cpu"]:
+            [cpu] = node.cpus
+            required_cap = util_distrib[cpu]
+
+            possible_freqs = [f for f, s in node.active_states.iteritems()
+                              if s.capacity >= required_cap]
+
+            if possible_freqs:
+                ideal_freqs[cpu] = min(possible_freqs)
+            else:
+                # CPU cannot provide required capacity, use max freq
+                ideal_freqs[cpu] = max(node.active_states.keys())
+                overutilized = True
+
+        freqs = [0 for _ in ideal_freqs]
+        for node in self._levels["cpu"]:
+            [cpu] = node.cpus
+
+            # Each CPU has to run at the max frequency required by any in its
+            # frequency domain
+            freq_domain = node.freq_domain
+            freqs[cpu] = max(ideal_freqs[c] for c in freq_domain)
+
+        return freqs, overutilized
+
+    def guess_freqs(self, util_distrib):
+        """
+        Work out CPU frequencies required to execute a workload
+
+        The input is a list where util_distrib[N] is the sum of the
+        frequency-invariant, capacity-invariant utilization of tasks placed CPU
+        N. That is, the quantity represented by util_avg in the Linux kernel's
+        per-entity load-tracking (PELT) system.
+
+        The range of utilization values is 0 - EnergyModel.capacity_scale, where
+        EnergyModel.capacity_scale represents the computational capacity of the
+        most powerful CPU at its highest available frequency.
+
+        This function returns the lowest possible frequency for each CPU that
+        provides enough capacity to satisfy the utilization, taking into account
+        frequency domains.
+        """
+        freqs, _ = self._guess_freqs(util_distrib)
+        return freqs
+
+    def would_overutilize(self, util_distrib):
+        # TODO simplify
+        _, overutilized = self._guess_freqs(util_distrib)
+        return overutilized
+
+    def _estimate_from_active_time(self, cpu_active_time, freqs, idle_states,
+                                   combine=False):
+        power = 0
+
+        ret = {}
+
+        for cpu, node in enumerate(self._levels["cpu"]):
+            assert [cpu] == node.cpus
+
+            active_power = (node.active_states[freqs[cpu]].power
+                            * cpu_active_time[cpu])
+            idle_power = (node.idle_states[idle_states[cpu]]
+                          * (1 - cpu_active_time[cpu]))
+
+            if combine:
+                ret[(cpu,)] = active_power + idle_power
+            else:
+                ret[(cpu,)] = {}
+                ret[(cpu,)]["active"] = active_power
+                ret[(cpu,)]["idle"] = idle_power
+
+            power += active_power + idle_power
+
+        for node in self._levels["cluster"]:
+            cpus = tuple(node.cpus)
+
+            # For now we assume clusters map to frequency domains 1:1
+            freq = freqs[cpus[0]]
+            assert all(freqs[c] == freq for c in cpus[1:])
+
+            # This works great for the synthetic periodic workloads we use in
+            # Lisa (where all threads wake up at the same time) but is no good
+            # for real workloads.
+            active_time = max(cpu_active_time[c] for c in cpus)
+
+            active_power = node.active_states[freq].power * active_time
+            idle_power = (max([node.idle_states[idle_states[c]] for c in cpus])
+                          * (1 - active_time))
+
+            if combine:
+                ret[cpus] = active_power + idle_power
+            else:
+                ret[cpus] = {}
+                ret[cpus]["active"] = active_power
+                ret[cpus]["idle"] = idle_power
+
+            power += active_power + idle_power
+
+        ret["power"] = power
+        return ret
+
+    def estimate_from_cpu_util(self, util_distrib, freqs=None, idle_states=None,
+                               combine=False):
+        """
+        TODO DOCUMENT THIS LOL
+        """
+        if freqs is None:
+            freqs = self.guess_freqs(util_distrib)
+        if idle_states is None:
+            idle_states = self.guess_idle_states(util_distrib)
+
+        power = 0
+
+        cpu_active_time = []
+        for cpu, node in enumerate(self._levels["cpu"]):
+            assert [cpu] == node.cpus
+            cap = node.active_states[freqs[cpu]].capacity
+            cpu_active_time.append(min(float(util_distrib[cpu]) / cap, 1.0))
+
+        return self._estimate_from_active_time(cpu_active_time,
+                                               freqs, idle_states, combine)
+======= end
