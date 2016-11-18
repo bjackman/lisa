@@ -22,6 +22,9 @@ import numpy as np
 
 from devlib.utils.misc import memoized
 
+class EnergyModelCapacityError(Exception):
+    pass
+
 ActiveState = namedtuple('ActiveState', ['capacity', 'power'])
 ActiveState.__new__.__defaults__ = (None, None)
 
@@ -442,6 +445,12 @@ class EnergyModel(object):
                 if not overutilized:
                     power = self.estimate_from_cpu_util(util, freqs=freqs)
                     candidates[util] = power
+
+        if not candidates:
+            # The system can't provide full throughput to this workload.
+            raise EnergyModelCapacityError(
+                "Can't handle workload - total cap = {}, max cap = {}".format(
+                    sum(capacities.values()), max(capacities.values())))
 
         # Whittle down to those that give the lowest energy estimate
         min_power = min(e["power"] for e in candidates.itervalues())
