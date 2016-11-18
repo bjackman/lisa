@@ -35,6 +35,7 @@ from energy import EnergyMeter
 from conf import JsonConf
 from platforms.juno_energy import juno_energy
 from platforms.hikey_energy import hikey_energy
+from platforms.pixel_energy import pixel_energy
 
 USERNAME_DEFAULT = 'root'
 PASSWORD_DEFAULT = ''
@@ -385,6 +386,12 @@ class TestEnv(ShareState):
             self.nrg_model = hikey_energy
             self.__modules = [ "cpufreq", "cpuidle" ]
             platform = Platform(model='hikey')
+
+        # Initialize Pixel phone
+        elif self.conf['board'].upper() == 'PIXEL':
+            self.nrg_model = pixel_energy
+            self.__modules = ['hwmon', 'cpufreq']
+            platform = Platform(model='pixel')
 
         elif self.conf['board'] != 'UNKNOWN':
             # Initilize from platform descriptor (if available)
