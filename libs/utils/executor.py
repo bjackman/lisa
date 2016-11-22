@@ -252,6 +252,14 @@ class Executor():
 
         self.target.cpufreq.set_all_governors(cpufreq['governor'])
 
+        if 'freqs' in cpufreq:
+            if cpufreq['governor'] != 'userspace':
+                raise ValueError('Must use userspace governor to set CPU freqs')
+            logging.info(r'%14s - CPU frequencies: %s',
+                    'CPUFreq', str(cpufreq['freqs']))
+            for cpu, freq in cpufreq['freqs'].iteritems():
+                self.target.cpufreq.set_frequency(cpu, freq)
+
         if 'params' in cpufreq:
             logging.info(r'%14s - governor params: %s',
                     'CPUFreq', str(cpufreq['params']))
