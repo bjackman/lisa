@@ -47,6 +47,7 @@ class FreqInvarianceTest(LisaTest):
                 "sched_switch",
                 "sched_load_avg_task",
                 "sched_load_avg_cpu",
+                "sched_pelt_se",
             ],
         },
         "modules": ["cpufreq"],
@@ -95,6 +96,8 @@ class FreqInvarianceTest(LisaTest):
         all_freqs = test_env.target.cpufreq.list_frequencies(cpu)
         # If we have loads of frequencies just test a subset
         freqs = all_freqs[::len(all_freqs)/8 + 1]
+        # Don't test the devil's frequency
+        freqs = [f for f in freqs if f != 666666666]
         for freq in freqs:
             confs.append({
                 "tag" : "freq_{}".format(freq),
@@ -128,9 +131,14 @@ class FreqInvarianceTest(LisaTest):
 
         # The Parser below will error out very cryptically if there are none of
         # the required events in the trace - catch it here instead.
-        if "sched_load_avg_task" not in trace.available_events:
+        if "sched_load_avg_task" in trace.available_events:
+            event = "sched_load_avg_task"
+        elif "sched_pelt_se" in trace.available_events:
+            event = "sched_pelt_se"
+        else:
             raise unittest.SkipTest(
-                "No sched_load_avg_task events. Does the kernel support them?")
+                "No sched_load_avg_task or sched_pelt_se events. "
+                "Does the kernel support them?")
 
         # Get time window during which workload ran
         (wload_start, wload_end) = self.get_window(experiment)
@@ -139,8 +147,13 @@ class FreqInvarianceTest(LisaTest):
 
         # Find mean value for util_avg
         [pid] = trace.getTaskByName(task)
-        parser = Parser(trace.ftrace, filters={"pid": pid})
-        util_avg_all = parser.solve("sched_load_avg_task:util_avg")[pid]
+        # TODO: should do the following:
+        # parser = Parser(trace.ftrace, filters={"pid": pid})
+        # util_avg_all = parser.solve("{}:util_avg".format(event))[pid]
+        # But something's wrong with Trappy (deep errors from pyparsing)
+        # Instead just mangle DataFrames by hand:
+        df = trace.ftrace.sched_pelt_se.data_frame
+        util_avg_all = df[df["__comm"].isin(tasks)]["util_avg"]
         util_avg = select_window(util_avg_all, window)
         util_avg_mean = area_under_curve(util_avg) / (window[1] - window[0])
 
