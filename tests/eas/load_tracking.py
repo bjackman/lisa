@@ -146,13 +146,7 @@ class FreqInvarianceTest(LisaTest):
         window = (wload_start + UTIL_AVG_CONVERGENCE_TIME, wload_end)
 
         # Find mean value for util_avg
-        [pid] = trace.getTaskByName(task)
-        # TODO: should do the following:
-        # parser = Parser(trace.ftrace, filters={"pid": pid})
-        # util_avg_all = parser.solve("{}:util_avg".format(event))[pid]
-        # But something's wrong with Trappy (deep errors from pyparsing)
-        # Instead just mangle DataFrames by hand:
-        df = trace.ftrace.sched_pelt_se.data_frame
+        df = getattr(trace.ftrace, event).data_frame
         util_avg_all = df[df["__comm"].isin(tasks)]["util_avg"]
         util_avg = select_window(util_avg_all, window)
         util_avg_mean = area_under_curve(util_avg) / (window[1] - window[0])
