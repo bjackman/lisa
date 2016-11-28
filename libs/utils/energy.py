@@ -94,16 +94,18 @@ class EnergyMeter(object):
         if not force and EnergyMeter._meter:
             return EnergyMeter._meter
 
+        log = logging.getLogger('EnergyMeter')
+
         # Initialize energy meter based on configuration
         if 'emeter' in conf:
             emeter = conf['emeter']
-            self._log.debug('using user-defined configuration')
+            log.debug('using user-defined configuration')
 
         # Initialize energy probe to board default
         elif 'board' in conf and \
             conf['board'] in DEFAULT_ENERGY_METER:
                 emeter = DEFAULT_ENERGY_METER[conf['board']]
-                self._log.debug('using default energy meter for [%s]',
+                log.debug('using default energy meter for [%s]',
                                 conf['board'])
         else:
             return None
@@ -115,7 +117,7 @@ class EnergyMeter(object):
         elif emeter['instrument'] == 'acme':
             EnergyMeter._meter = ACME(target, emeter, res_dir)
 
-        self._log.debug('Results dir: %s', res_dir)
+        log.debug('Results dir: %s', res_dir)
         return EnergyMeter._meter
 
     def sample(self):

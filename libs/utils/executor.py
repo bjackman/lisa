@@ -123,7 +123,7 @@ class Executor():
                        len(self._experiments_conf['wloads']),
                        self._iterations)
         wload_confs = ', '.join(self._experiments_conf['wloads'])
-        self._log.info('      %s', 'Executor', wload_confs)
+        self._log.info('      %s', wload_confs)
 
         self._log.info('Total: %d experiments', self._exp_count)
 
@@ -297,7 +297,7 @@ class Executor():
         group.set(**tc['cgroups']['conf'][kind][name])
 
     def _target_configure(self, tc):
-        self._print_header('TargetConfig',
+        self._print_header(
                 r'configuring target for [{}] experiments'\
                 .format(tc['tag']))
         self._setup_kernel(tc)
@@ -510,7 +510,7 @@ class Executor():
         wload = experiment.wload
         tc_idx = tc['tag']
 
-        self._print_title('Executor', 'Experiment {}/{}, [{}:{}] {}/{}'\
+        self._print_title('Experiment {}/{}, [{}:{}] {}/{}'\
                 .format(exp_idx, self._exp_count,
                         tc_idx, experiment.wload_name,
                         experiment.iteration, self._iterations))
@@ -551,7 +551,7 @@ class Executor():
             self._log.info('   %s',
                            stats_file.replace(self.te.res_dir, '<res_dir>'))
 
-        self._print_footer('Executor')
+        self._print_footer()
 
 ################################################################################
 # Utility Functions

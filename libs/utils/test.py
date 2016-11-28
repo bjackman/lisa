@@ -59,7 +59,6 @@ class LisaTest(unittest.TestCase):
         """
 
         cls.logger = logging.getLogger('LisaTest')
-        cls.conf = conf
         cls._runExperiments()
 
     @classmethod
