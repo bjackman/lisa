@@ -98,7 +98,7 @@ class FreqInvarianceTest(LisaTest):
         freqs = all_freqs[::len(all_freqs)/8 + 1]
         # Don't test the devil's frequency
         freqs = [f for f in freqs if f != 666666666]
-        for freq in freqs[0:1]:
+        for freq in freqs:
             confs.append({
                 "tag" : "freq_{}".format(freq),
                 "flags" : "ftrace",
@@ -124,9 +124,13 @@ class FreqInvarianceTest(LisaTest):
         [phase] = params[task]["phases"]
         return (phase.duty_cycle_pct * UTIL_SCALE) / 100.
 
-    def get_util_avg(self, experiment):
+    def get_sched_signal(self, experiment, signal):
         """
-        Get a pandas.Series with the util_avg sched signal for the workload task
+        Get a pandas.Series with the sched signal for the workload task
+
+        This examines scheduler load tracking trace events, supporting either
+        sched_load_avg_task or sched_pelt_se. You will need a target kernel that
+        includes these events.
         """
         [task] = experiment.wload.tasks.keys()
 
@@ -146,27 +150,51 @@ class FreqInvarianceTest(LisaTest):
                              "Does the kernel support them?")
 
         df = getattr(trace.ftrace, event).data_frame
-        util_avg = df[df["__comm"].isin([task])]["util_avg"]
+        util_avg = df[df["__comm"].isin([task])][signal]
         return select_window(util_avg, self.get_window(experiment))
+
+    def get_signal_mean(self, experiment, signal,
+                        ignore_first_s=UTIL_AVG_CONVERGENCE_TIME):
+        """
+        Get the mean of a scheduler signal for the experiment's task
+
+        Ignore the first `ignore_first_s` seconds of the signal.
+        """
+        (wload_start, wload_end) = self.get_window(experiment)
+        window = (wload_start + ignore_first_s, wload_end)
+
+        util_avg = self.get_sched_signal(experiment, signal)
+        return area_under_curve(util_avg) / (window[1] - window[0])
 
     @experiment_test
     def test_task_util(self, experiment, tasks):
         """
-        Assert that the mean of the util_avg signal matched the expected value
+        Test that the mean of the util_avg signal matched the expected value
         """
-        # Get time window during which workload ran
-        (wload_start, wload_end) = self.get_window(experiment)
-        # Ignore an initial period for the signal to settle
-        window = (wload_start + UTIL_AVG_CONVERGENCE_TIME, wload_end)
-
-        # Find mean value for util_avg
-        util_avg = self.get_util_avg(experiment)
-        util_avg_mean = area_under_curve(util_avg) / (window[1] - window[0])
-
         exp_util = self.get_expected_util_avg(experiment)
+        util_avg_mean = self.get_signal_mean(experiment, "util_avg")
+
         error_margin = exp_util * (ERROR_MARGIN_PCT / 100.)
         freq = experiment.conf["cpufreq"]["freqs"].values()[0]
         msg = "Saw util_avg around {}, expected {} at freq {}".format(
             util_avg_mean, exp_util, freq)
         self.assertAlmostEqual(util_avg_mean, exp_util, delta=error_margin,
+                               msg=msg)
+
+    @experiment_test
+    def test_task_load(self, experiment, tasks):
+        """
+        Test that the mean of the load_avg signal matched the expected value
+        """
+        # Assuming that the system was under little stress (so the task was
+        # RUNNING whenever it was RUNNABLE) and that the task was run with a
+        # 'nice' value of 0, the load_avg should be similar to the util_avg.
+        exp_load = self.get_expected_util_avg(experiment)
+        load_avg_mean = self.get_signal_mean(experiment, "load_avg")
+
+        error_margin = exp_load * (ERROR_MARGIN_PCT / 100.)
+        freq = experiment.conf["cpufreq"]["freqs"].values()[0]
+        msg = "Saw load_avg around {}, expected {} at freq {}".format(
+            load_avg_mean, exp_load, freq)
+        self.assertAlmostEqual(load_avg_mean, exp_load, delta=error_margin,
                                msg=msg)
