@@ -151,6 +151,8 @@ class Trace(object):
 
         self.analysis = AnalysisRegister(self)
 
+        self._populate_tasks()
+
     def _registerDataFrameGetters(self, module):
         """
         Internal utility function that looks up getter functions with a "_dfg_"
@@ -402,13 +404,13 @@ class Trace(object):
         return [self._tasks_by_pid.ix[pid].values[0]]
 
     def getTasks(self, dataframe=None,
-                 task_names=None, name_key='comm', pid_key='pid'):
+                 task_names=None, name_key='__comm', pid_key='__pid'):
         """
         Helper function to get PIDs of specified tasks.
 
         This method can take a Pandas dataset in input to be used to fiter out
         the PIDs of all the specified tasks. If a dataset is not provided,
-        previously filtered PIDs are returned.
+        all PIDs found in the trace are returned.
 
         If a list of task names is not provided, all tasks detected in the trace
         will be used. The specified dataframe must provide at least two columns
@@ -423,8 +425,7 @@ class Trace(object):
             tasks)
         :type task_names: list(str)
 
-        :param name_key: The name of the dataframe columns containing task
-            names
+        :param name_key: The name of the dataframe columns containing task names
         :type name_key: str
 
         :param pid_key: The name of the dataframe columns containing task PIDs
@@ -454,6 +455,14 @@ class Trace(object):
                             tname, self.tasks[tname]['pid'])
         return self.tasks
 
+    def _populate_tasks(self):
+        if 'sched_switch' not in self.available_events:
+            logging.warning("sched_switch not in trace events - won't find tasks")
+            return
+
+        sched_switch = self._dfg_trace_event('sched_switch')
+        all_names = sched_switch['__comm'].unique()
+        self.getTasks(sched_switch, all_names)
 
 ###############################################################################
 # DataFrame Getter Methods
