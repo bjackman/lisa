@@ -133,9 +133,7 @@ class FreqInvarianceTest(LisaTest):
         includes these events.
         """
         [task] = experiment.wload.tasks.keys()
-
-        events = self.test_conf["ftrace"]["events"]
-        trace = Trace(self.te.platform, experiment.out_dir, events, [task])
+        trace = self.get_trace(experiment)
 
         # There are two different scheduler trace events that expose the
         # util_avg signal. Neither of them is in mainline. Eventually they
