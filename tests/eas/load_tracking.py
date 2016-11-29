@@ -98,7 +98,7 @@ class FreqInvarianceTest(LisaTest):
         freqs = all_freqs[::len(all_freqs)/8 + 1]
         # Don't test the devil's frequency
         freqs = [f for f in freqs if f != 666666666]
-        for freq in freqs:
+        for freq in freqs[0:1]:
             confs.append({
                 "tag" : "freq_{}".format(freq),
                 "flags" : "ftrace",
@@ -147,8 +147,7 @@ class FreqInvarianceTest(LisaTest):
 
         df = getattr(trace.ftrace, event).data_frame
         util_avg = df[df["__comm"].isin([task])]["util_avg"]
-        util_avg = select_window(df, self.get_window(experiment))
-
+        return select_window(util_avg, self.get_window(experiment))
 
     @experiment_test
     def test_task_util(self, experiment, tasks):
