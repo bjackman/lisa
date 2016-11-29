@@ -113,44 +113,58 @@ class FreqInvarianceTest(LisaTest):
             "confs": confs,
         }
 
-    @experiment_test
-    def test_task_util(self, experiment, tasks):
+    def get_expected_util_avg(self, experiment):
         """
-        Assert that the mean of the util_avg signal matched the expected value
+        Examine workload to figure out expected util_avg value
+
+        Assumes an RT-App workload with a single task with a single phase.
         """
-        # Examine workload to figure out expected util_avg value
-        [task] = tasks
+        [task] = experiment.wload.tasks.keys()
         params = experiment.wload.params["profile"]
         [phase] = params[task]["phases"]
-        logging.info("Testing {}% task".format(phase.duty_cycle_pct))
-        exp_util = (phase.duty_cycle_pct * UTIL_SCALE) / 100.
+        return (phase.duty_cycle_pct * UTIL_SCALE) / 100.
 
-        # Get trace
+    def get_util_avg(self, experiment):
+        """
+        Get a pandas.Series with the util_avg sched signal for the workload task
+        """
+        [task] = experiment.wload.tasks.keys()
+
         events = self.test_conf["ftrace"]["events"]
-        trace = Trace(self.te.platform, experiment.out_dir, events, tasks)
+        trace = Trace(self.te.platform, experiment.out_dir, events, [task])
 
-        # The Parser below will error out very cryptically if there are none of
-        # the required events in the trace - catch it here instead.
+        # There are two different scheduler trace events that expose the
+        # util_avg signal. Neither of them is in mainline. Eventually they
+        # should be unified but for now we'll just check for both types of
+        # event.
         if "sched_load_avg_task" in trace.available_events:
             event = "sched_load_avg_task"
         elif "sched_pelt_se" in trace.available_events:
             event = "sched_pelt_se"
         else:
-            raise unittest.SkipTest(
-                "No sched_load_avg_task or sched_pelt_se events. "
-                "Does the kernel support them?")
+            raise ValueError("No sched_load_avg_task or sched_pelt_se events. "
+                             "Does the kernel support them?")
 
+        df = getattr(trace.ftrace, event).data_frame
+        util_avg = df[df["__comm"].isin([task])]["util_avg"]
+        util_avg = select_window(df, self.get_window(experiment))
+
+
+    @experiment_test
+    def test_task_util(self, experiment, tasks):
+        """
+        Assert that the mean of the util_avg signal matched the expected value
+        """
         # Get time window during which workload ran
         (wload_start, wload_end) = self.get_window(experiment)
         # Ignore an initial period for the signal to settle
         window = (wload_start + UTIL_AVG_CONVERGENCE_TIME, wload_end)
 
         # Find mean value for util_avg
-        df = getattr(trace.ftrace, event).data_frame
-        util_avg_all = df[df["__comm"].isin(tasks)]["util_avg"]
-        util_avg = select_window(util_avg_all, window)
+        util_avg = self.get_util_avg(experiment)
         util_avg_mean = area_under_curve(util_avg) / (window[1] - window[0])
 
+        exp_util = self.get_expected_util_avg(experiment)
         error_margin = exp_util * (ERROR_MARGIN_PCT / 100.)
         freq = experiment.conf["cpufreq"]["freqs"].values()[0]
         msg = "Saw util_avg around {}, expected {} at freq {}".format(
