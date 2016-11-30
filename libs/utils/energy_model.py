@@ -257,7 +257,15 @@ class EnergyModel(object):
         return overutilized
 
     def _estimate_from_active_time(self, cpu_active_time, freqs, idle_states,
-                                   combine=False):
+                                   combine):
+        """
+        Helper for estimate_from_cpu_util
+
+        Like estimate_from_cpu_util but uses active time i.e. proportion of time
+        spent not-idle in the range 0.0 - 0.1.
+
+        If combine=False, return idle and active power as separate components.
+        """
         power = 0
 
         ret = {}
@@ -307,17 +315,38 @@ class EnergyModel(object):
         ret["power"] = power
         return ret
 
-    def estimate_from_cpu_util(self, util_distrib, freqs=None, idle_states=None,
-                               combine=False):
+    def estimate_from_cpu_util(self, util_distrib, freqs=None, idle_states=None):
         """
-        TODO DOCUMENT THIS LOL
+        Estimate the energy usage of the system under a utilization distribution
+
+        Take as input a list U where U[n] is the utilization of CPU n. Assume
+        that this utilization distribution is static, for example imagine each
+        CPU is running a fixed periodic task that indefinitely provides the same
+        amount of work.
+
+        Optionally also take freqs; a list of frequencies at which each CPU is
+        assumed to run, and idle_states, the idle states that each CPU can enter
+        between activations. If not provided, they will be estimated assuming an
+        ideal selection system (i.e. perfect cpufreq & cpuidle governors).
+
+        Return a dict with power in bogo-Watts (bW), with contributions from
+        each system component keyed with a tuple of the CPUs comprising that
+        component, and the sum of those components keyed with 'power'. e.g:
+
+            {
+                (0,)    : 10,
+                (1,)    : 10,
+                (1, 2)  : 5,
+                'power' : 25
+            }
+
+        This represents CPUs 0 and 1 each using 10bW and their shared
+        resources using 5bW for a total of 25bW.
         """
         if freqs is None:
             freqs = self.guess_freqs(util_distrib)
         if idle_states is None:
             idle_states = self.guess_idle_states(util_distrib)
-
-        power = 0
 
         cpu_active_time = []
         for cpu, node in enumerate(self._levels["cpu"]):
@@ -326,11 +355,39 @@ class EnergyModel(object):
             cpu_active_time.append(min(float(util_distrib[cpu]) / cap, 1.0))
 
         return self._estimate_from_active_time(cpu_active_time,
-                                               freqs, idle_states, combine)
+                                               freqs, idle_states, combine=True)
 
     # TODO this takes exponential time, we can almost certainly avoid that.
     # TODO clean up interface and document
-    def _find_optimal_placements(self, capacities):
+    def get_optimal_placements(self, capacities):
+        """
+        Find the optimal distribution of work for a set of tasks
+
+        Take as input a dict mapping tasks to expected utilization
+        values. These tasks are assumed not to change; they have a single static
+        utilization value. A set of single-phase periodic RT-App tasks is an
+        example of a suitable workload for this model.
+
+        Returns a list of candidates which are estimated to be optimal
+        in terms of power consumption, but that do not result in any CPU
+        becoming over-utilized. Each candidate is a list U where U[n] is the
+        expected utilization of CPU n under the task placement. Multiple task
+        placements that result in the same utilization distribution are
+        considered equivalent.
+
+        If no such candidates exist, i.e. the system being modeled cannot
+        satisfy the workload's throughput requirements, an
+        EnergyModelCapactyError is raised. For example, if e was an EnergyModel
+        modeling two CPUs with capacity 1024, this call would raise this error:
+
+            e.get_optimal_placements({"t1": 800, "t2": 800, "t3: "800"})
+
+        This estimation assumes an ideal system of selecting OPPs and idle
+        states for CPUs.
+
+        This is a brute force search taking time exponential wrt. the number of
+        tasks.
+        """
         tasks = capacities.keys()
 
         num_candidates = len(self.cpus) ** len(tasks)
@@ -357,4 +414,4 @@ class EnergyModel(object):
         min_power = min(e["power"] for e in candidates.itervalues())
 
         logging.info("%14s - Done", "EnergyModel")
-        return min_power, [u for u, e in candidates.iteritems() if e["power"] == min_power]
+        return [u for u, e in candidates.iteritems() if e["power"] == min_power]
