@@ -174,6 +174,15 @@ class FreqInvarianceTest(LisaTest):
 
         error_margin = exp_util * (ERROR_MARGIN_PCT / 100.)
         freq = experiment.conf["cpufreq"]["freqs"].values()[0]
+
+        print "TESTING TASK UTILIZATION"
+        print "exp_util:"
+        print exp_util
+        print "util_avg_mean:"
+        print util_avg_mean
+        print "freq:"
+        print freq
+
         msg = "Saw util_avg around {}, expected {} at freq {}".format(
             util_avg_mean, exp_util, freq)
         self.assertAlmostEqual(util_avg_mean, exp_util, delta=error_margin,
@@ -192,6 +201,15 @@ class FreqInvarianceTest(LisaTest):
 
         error_margin = exp_load * (ERROR_MARGIN_PCT / 100.)
         freq = experiment.conf["cpufreq"]["freqs"].values()[0]
+
+        print "TESTING TASK UTILIZATION"
+        print "exp_util:"
+        print exp_load
+        print "load_avg_mean:"
+        print load_avg_mean
+        print "freq:"
+        print freq
+
         msg = "Saw load_avg around {}, expected {} at freq {}".format(
             load_avg_mean, exp_load, freq)
         self.assertAlmostEqual(load_avg_mean, exp_load, delta=error_margin,
