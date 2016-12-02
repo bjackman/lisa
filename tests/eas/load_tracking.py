@@ -124,9 +124,9 @@ class FreqInvarianceTest(LisaTest):
         [phase] = params[task]["phases"]
         return (phase.duty_cycle_pct * UTIL_SCALE) / 100.
 
-    def get_sched_signal(self, experiment, signal):
+    def get_sched_signals(self, experiment, signals):
         """
-        Get a pandas.Series with the sched signal for the workload task
+        Get a pandas.DataFrame with the sched signals for the workload task
 
         This examines scheduler load tracking trace events, supporting either
         sched_load_avg_task or sched_pelt_se. You will need a target kernel that
@@ -161,8 +161,8 @@ class FreqInvarianceTest(LisaTest):
         (wload_start, wload_end) = self.get_window(experiment)
         window = (wload_start + ignore_first_s, wload_end)
 
-        util_avg = self.get_sched_signal(experiment, signal)
-        return area_under_curve(util_avg) / (window[1] - window[0])
+        signal = self.get_sched_signals(experiment, [signal])[signal]
+        return area_under_curve(signal) / (window[1] - window[0])
 
     @experiment_test
     def test_task_util(self, experiment, tasks):
