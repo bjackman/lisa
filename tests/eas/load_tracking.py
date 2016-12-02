@@ -148,8 +148,8 @@ class FreqInvarianceTest(LisaTest):
                              "Does the kernel support them?")
 
         df = getattr(trace.ftrace, event).data_frame
-        util_avg = df[df["__comm"].isin([task])][signal]
-        return select_window(util_avg, self.get_window(experiment))
+        signals = df[df["comm"] == task][signals]
+        return select_window(signals, self.get_window(experiment))
 
     def get_signal_mean(self, experiment, signal,
                         ignore_first_s=UTIL_AVG_CONVERGENCE_TIME):
