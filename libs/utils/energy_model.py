@@ -25,9 +25,50 @@ from devlib.utils.misc import memoized
 ActiveState = namedtuple('ActiveState', ['capacity', 'power'])
 ActiveState.__new__.__defaults__ = (None, None)
 
-class EnergyModelNode(namedtuple('EnergyModelNode',
-                                 ['cpus', 'active_states', 'idle_states',
-                                  'power_domain', 'freq_domain'])):
+class _CpuTree(object):
+    def __init__(self, cpus, children):
+        if (cpus is None) == (children is None):
+            raise ValueError('Provide exactly one of: cpus or children')
+
+        if cpus is not None:
+            if len(cpus) == 0:
+                raise ValueError('cpus cannot be empty')
+            self.cpus = cpus
+            self.children = None
+        else:
+            if len(children) == 0:
+                raise ValueError('children cannot be empty')
+            self.cpus = sorted(set().union(*[n.cpus for n in children]))
+            self.children = children
+            for child in children:
+                child.parent = self
+
+        self.name = None
+
+    def __repr__(self):
+        name_bit = ''
+        if self.name:
+            name_bit = 'name="{}", '.format(self.name)
+
+        if self.children:
+            return '{}({}children={})'.format(
+                self.__class__.__name__, name_bit, self.children)
+        else:
+            return '{}({}cpus={})'.format(
+                self.__class__.__name__, name_bit, self.cpus)
+
+class EnergyModelNode(_CpuTree):
+    def __init__(self, active_states, idle_states,
+                 cpus=None, children=None, name=None):
+        super(EnergyModelNode, self).__init__(cpus, children)
+
+        if cpus and name is None and len(cpus) == 1:
+                name = 'cpu' + str(cpus[0])
+
+        self.name = name
+        self.active_states = active_states
+        self.idle_states = idle_states
+
     @property
     def max_capacity(self):
         return max(s.capacity for s in self.active_states.values())
@@ -35,27 +76,9 @@ class EnergyModelNode(namedtuple('EnergyModelNode',
     def idle_state_idx(self, state):
         return self.idle_states.keys().index(state)
 
-EnergyModelNode.__new__.__defaults__ = (None, None, None, None, None)
-
-class PowerDomain(object):
-    def __init__(self, idle_states, parent, cpus):
-        self.cpus = set()
+class PowerDomain(_CpuTree):
+    def __init__(self, idle_states, cpus=None, children=None):
         self.idle_states = idle_states
-
-        self.parent = parent
-        self.add_cpus(set(cpus))
-
-    def add_cpus(self, cpus):
-        self.cpus = self.cpus.union(cpus)
-        if self.parent:
-            self.parent.add_cpus(self.cpus)
-
-    def __repr__(self):
-        return 'PowerDomain(cpus={})'.format(list(self.cpus))
-
-# The bottom level of the EnergyModelNode hierarchy should contain nodes with
-# single logical CPUs
-CPU_LEVEL = 0
 
 class EnergyModel(object):
     """
