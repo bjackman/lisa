@@ -1,6 +1,7 @@
 from collections import OrderedDict
 
-from energy_model import ActiveState, EnergyModelNode, PowerDomain, EnergyModel
+from energy_model import (ActiveState, EnergyModelNode, EnergyModelRoot,
+                          PowerDomain, EnergyModel)
 
 a53_cluster_active_states = OrderedDict([
     (450000, ActiveState(power=26)),
@@ -73,25 +74,26 @@ def a57_cpu_node(cpu):
                            active_states=a57_cpu_active_states,
                            idle_states=a57_cpu_idle_states)
 
-juno_energy = EnergyModel(topology=EnergyModelNode(
-    children=[
-        EnergyModelNode(
-            name="cluster_a57",
-            active_states=a57_cluster_active_states,
-            idle_states=a57_cluster_idle_states,
-            children=[a57_cpu_node(c) for c in a57s]),
-        EnergyModelnode(
-            name="cluster_a53",
-            active_states=a57_cluster_active_states,
-            idle_states=a57_cluster_idle_states,
-            children=[a57_cpu_node(c) for c in a53s])],
+juno_energy = EnergyModel(
+    root_node=EnergyModelRoot(
+        children=[
+            EnergyModelNode(
+                name="cluster_a57",
+                active_states=a57_cluster_active_states,
+                idle_states=a57_cluster_idle_states,
+                children=[a57_cpu_node(c) for c in a57s]),
+            EnergyModelNode(
+                name="cluster_a53",
+                active_states=a53_cluster_active_states,
+                idle_states=a53_cluster_idle_states,
+                children=[a53_cpu_node(c) for c in a53s])]),
     power_domains=[
         PowerDomain(
             idle_states=["cluster-sleep-0"],
-            children=[PowerDomain(idle_states=["WFI", "cpu-slep-0"], cpus=[c])
+            children=[PowerDomain(idle_states=["WFI", "cpu-sleep-0"], cpus=[c])
                       for c in a57s]),
         PowerDomain(
             idle_states=["cluster-sleep-0"],
-            children=[PowerDomain(idle_states=["WFI", "cpu-slep-0"], cpus=[c])
+            children=[PowerDomain(idle_states=["WFI", "cpu-sleep-0"], cpus=[c])
                       for c in a53s])],
     freq_domains=[a53s, a57s])
