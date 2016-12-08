@@ -34,7 +34,7 @@ class _CpuTree(object):
             if len(cpus) == 0:
                 raise ValueError('cpus cannot be empty')
             self.cpus = cpus
-            self.children = None
+            self.children = []
         else:
             if len(children) == 0:
                 raise ValueError('children cannot be empty')
@@ -56,6 +56,19 @@ class _CpuTree(object):
         else:
             return '{}({}cpus={})'.format(
                 self.__class__.__name__, name_bit, self.cpus)
+
+    def _iter(self, include_non_leaves):
+        for child in self.children:
+            for child_i in child._iter(include_non_leaves):
+                yield child_i
+        if include_non_leaves or not self.children:
+            yield self
+
+    def iter_nodes(self):
+        return self._iter(True)
+
+    def iter_leaves(self):
+        return self._iter(False)
 
 class EnergyModelNode(_CpuTree):
     def __init__(self, active_states, idle_states,
