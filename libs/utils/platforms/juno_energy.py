@@ -32,18 +32,11 @@ a53_cpu_idle_states = OrderedDict([
 ])
 
 a53s = [0, 3, 4, 5]
-a53_pd = PowerDomain(cpus=a53s, idle_states=["cluster-sleep-0"], parent=None)
 
 def a53_cpu_node(cpu):
-    cpu_pd=PowerDomain(cpus=[cpu],
-                       parent=a53_pd,
-                       idle_states=["WFI", "cpu-sleep-0"])
-
-    return EnergyModelNode([cpu],
+    return EnergyModelNode(cpus=[cpu],
                            active_states=a53_cpu_active_states,
-                           idle_states=a53_cpu_idle_states,
-                           power_domain=cpu_pd,
-                           freq_domain=a53s)
+                           idle_states=a53_cpu_idle_states)
 
 a57_cluster_active_states = OrderedDict([
     (450000,  ActiveState(power=24)),
@@ -74,36 +67,31 @@ a57_cpu_idle_states = OrderedDict([
 ])
 
 a57s = [1, 2]
-a57_pd = PowerDomain(cpus=a57s, idle_states=["cluster-sleep-0"], parent=None)
 
 def a57_cpu_node(cpu):
-    cpu_pd = PowerDomain(cpus=[cpu],
-                         parent=a57_pd,
-                         idle_states=["WFI", "cpu-sleep-0"])
-
-    return EnergyModelNode([cpu],
+    return EnergyModelNode(cpus=[cpu],
                            active_states=a57_cpu_active_states,
-                           idle_states=a57_cpu_idle_states,
-                           power_domain=cpu_pd,
-                           freq_domain=a57s)
+                           idle_states=a57_cpu_idle_states)
 
-juno_energy_levels = [
-    [
-        a53_cpu_node(0),
-        a57_cpu_node(1),
-        a57_cpu_node(2),
-        a53_cpu_node(3),
-        a53_cpu_node(4),
-        a53_cpu_node(5)
-    ],
-    [
-        EnergyModelNode(cpus=[0, 3, 4, 5],
-                        active_states=a53_cluster_active_states,
-                        idle_states=a53_cluster_idle_states),
-        EnergyModelNode(cpus=[1, 2],
-                        active_states=a57_cluster_active_states,
-                        idle_states=a57_cluster_idle_states)
-    ],
-]
-
-juno_energy = EnergyModel(levels=juno_energy_levels)
+juno_energy = EnergyModel(topology=EnergyModelNode(
+    children=[
+        EnergyModelNode(
+            name="cluster_a57",
+            active_states=a57_cluster_active_states,
+            idle_states=a57_cluster_idle_states,
+            children=[a57_cpu_node(c) for c in a57s]),
+        EnergyModelnode(
+            name="cluster_a53",
+            active_states=a57_cluster_active_states,
+            idle_states=a57_cluster_idle_states,
+            children=[a57_cpu_node(c) for c in a53s])],
+    power_domains=[
+        PowerDomain(
+            idle_states=["cluster-sleep-0"],
+            children=[PowerDomain(idle_states=["WFI", "cpu-slep-0"], cpus=[c])
+                      for c in a57s]),
+        PowerDomain(
+            idle_states=["cluster-sleep-0"],
+            children=[PowerDomain(idle_states=["WFI", "cpu-slep-0"], cpus=[c])
+                      for c in a53s])],
+    freq_domains=[a53s, a57s])
