@@ -75,7 +75,10 @@ class EnergyModelNode(_CpuTree):
                  cpus=None, children=None, name=None):
         super(EnergyModelNode, self).__init__(cpus, children)
 
-        if cpus and name is None and len(cpus) == 1:
+        if not self.children:
+            if len(cpus) != 1:
+                raise ValueError('Leaf EnergyModelNodes must have a single CPU')
+            if not name:
                 name = 'cpu' + str(cpus[0])
 
         self.name = name
@@ -88,6 +91,11 @@ class EnergyModelNode(_CpuTree):
 
     def idle_state_idx(self, state):
         return self.idle_states.keys().index(state)
+
+class EnergyModelRoot(EnergyModelNode):
+    def __init__(self, active_states=None, idle_states=None, *args, **kwargs):
+        return super(EnergyModelRoot, self).__init__(
+            active_states, idle_states, *args, **kwargs)
 
 class PowerDomain(_CpuTree):
     def __init__(self, idle_states, cpus=None, children=None):
@@ -110,30 +118,29 @@ class EnergyModel(object):
     # TODO check that this is the highest cap available
     capacity_scale = 1024
 
-    def __init__(self, levels=None):
-        self._levels = levels
-
-        self.num_cpus = len(self._levels[CPU_LEVEL])
-        self.cpus = [n.cpus[0] for n in levels[CPU_LEVEL]]
-        if self.cpus != range(self.num_cpus):
+    def __init__(self, root_node, power_domains, freq_domains):
+        self.cpus = root_node.cpus
+        if self.cpus != range(len(self.cpus)):
             raise ValueError('CPUs are sparse or out of order')
-        if any(len(n.cpus) != 1 for n in levels[CPU_LEVEL]):
-            raise ValueError('Level 0 nodes must all have exactly 1 CPU')
+
+        self.cpu_nodes = sorted(list(root_node.iter_leaves()),
+                                key=lambda n: n.cpus[0])
+
+    def _cpus_with_capacity(self, cap):
+        return [c for c in self.cpus
+                if self.cpu_nodes[c].max_capacity == cap]
 
     @property
     @memoized
     def biggest_cpus(self):
-        max_cap = max(n.max_capacity for n in self._levels[CPU_LEVEL])
-        return [n.cpus[0] for n in self._levels[CPU_LEVEL]
-                if n.max_capacity == max_cap]
+        max_cap = max(n.max_capacity for n in self.cpu_nodes)
+        return self._cpus_with_cap(max_cap)
 
     @property
     @memoized
     def littlest_cpus(self):
         min_cap = min(n.max_capacity for n in self._levels[CPU_LEVEL])
-        return [n.cpus[0] for n in self._levels[CPU_LEVEL]
-                if n.max_capacity == min_cap]
-
+        return self._cpus_with_cap(min_cap)
 
     @property
     @memoized
@@ -141,5 +148,5 @@ class EnergyModel(object):
         """
         True iff CPUs do not all have the same efficiency and OPP range
         """
-        states = self._levels[CPU_LEVEL][0].active_states
-        return any(c.active_states != states for c in self._levels[CPU_LEVEL][1:])
+        states = self.cpu_nodes[0].active_states
+        return any(c.active_states != states for c in self.cpu_nodes[1:])
