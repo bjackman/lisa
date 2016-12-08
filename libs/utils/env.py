@@ -26,15 +26,13 @@ import time
 import unittest
 
 import devlib
+from devlib.utils.misc import memoized
+from devlib import Platform
+from trappy.stats.Topology import Topology
 
 from wlgen import RTA
 from energy import EnergyMeter
 from conf import JsonConf
-
-from devlib.utils.misc import memoized
-from trappy.stats.Topology import Topology
-
-from devlib import Platform
 
 USERNAME_DEFAULT = 'root'
 PASSWORD_DEFAULT = ''
