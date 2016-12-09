@@ -74,7 +74,7 @@ class EnergyModelNode(_CpuTree):
         super(EnergyModelNode, self).__init__(cpu, children)
 
         if cpu and not name:
-                name = 'cpu' + str(cpus[0])
+            name = 'cpu' + str(cpu)
 
         self.name = name
         self.active_states = active_states
