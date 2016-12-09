@@ -57,6 +57,27 @@ class TestCpuTree(unittest.TestCase):
 
         self.assertEqual(len(nodes), node_count)
 
+@st.composite
+def energy_model_node(draw, elements=nested_list_none):
+    l = draw(elements)
+
+    def recurse(l, leaf_count, node_count):
+        new_l = []
+        for idx, val in enumerate(l):
+            if val is None:
+                new_l.append(_CpuTree(cpu=leaf_count, children=None))
+                leaf_count += 1
+            else:
+                sub_l, leaf_count, node_count = recurse(val,
+                                                        leaf_count, node_count)
+                new_l.append(_CpuTree(children=sub_l, cpu=None))
+            node_count += 1
+        return new_l, leaf_count, node_count
+
+    children, leaf_count, node_count = recurse(l, 0, 0)
+    tree = _CpuTree(children=children, cpu=None)
+    return tree, leaf_count, node_count + 1
+
 # nosetests doesn't run this for some reason
 if __name__ == "__main__":
     unittest.main()
