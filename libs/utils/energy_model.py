@@ -26,14 +26,12 @@ ActiveState = namedtuple('ActiveState', ['capacity', 'power'])
 ActiveState.__new__.__defaults__ = (None, None)
 
 class _CpuTree(object):
-    def __init__(self, cpus, children):
-        if (cpus is None) == (children is None):
+    def __init__(self, cpu, children):
+        if (cpu is None) == (children is None):
             raise ValueError('Provide exactly one of: cpus or children')
 
-        if cpus is not None:
-            if len(cpus) == 0:
-                raise ValueError('cpus cannot be empty')
-            self.cpus = cpus
+        if cpu is not None:
+            self.cpus = [cpu]
             self.children = []
         else:
             if len(children) == 0:
@@ -72,13 +70,10 @@ class _CpuTree(object):
 
 class EnergyModelNode(_CpuTree):
     def __init__(self, active_states, idle_states,
-                 cpus=None, children=None, name=None):
-        super(EnergyModelNode, self).__init__(cpus, children)
+                 cpu=None, children=None, name=None):
+        super(EnergyModelNode, self).__init__(cpu, children)
 
-        if not self.children:
-            if len(cpus) != 1:
-                raise ValueError('Leaf EnergyModelNodes must have a single CPU')
-            if not name:
+        if cpu and not name:
                 name = 'cpu' + str(cpus[0])
 
         self.name = name
@@ -98,7 +93,7 @@ class EnergyModelRoot(EnergyModelNode):
             active_states, idle_states, *args, **kwargs)
 
 class PowerDomain(_CpuTree):
-    def __init__(self, idle_states, cpus=None, children=None):
+    def __init__(self, idle_states, cpu=None, children=None):
         self.idle_states = idle_states
 
 class EnergyModel(object):
