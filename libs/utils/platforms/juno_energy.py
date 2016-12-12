@@ -51,7 +51,7 @@ a53_cpu_idle_states = OrderedDict([
 a53s = [0, 3, 4, 5]
 
 def a53_cpu_node(cpu):
-    return EnergyModelNode(cpus=[cpu],
+    return EnergyModelNode(cpu=cpu,
                            active_states=a53_cpu_active_states,
                            idle_states=a53_cpu_idle_states)
 
@@ -86,7 +86,7 @@ a57_cpu_idle_states = OrderedDict([
 a57s = [1, 2]
 
 def a57_cpu_node(cpu):
-    return EnergyModelNode(cpus=[cpu],
+    return EnergyModelNode(cpu=cpu,
                            active_states=a57_cpu_active_states,
                            idle_states=a57_cpu_idle_states)
 
@@ -103,13 +103,13 @@ juno_energy = EnergyModel(
                 active_states=a53_cluster_active_states,
                 idle_states=a53_cluster_idle_states,
                 children=[a53_cpu_node(c) for c in a53s])]),
-    power_domains=[
+    root_power_domain=PowerDomain(idle_states=[], children=[
         PowerDomain(
             idle_states=["cluster-sleep-0"],
-            children=[PowerDomain(idle_states=["WFI", "cpu-sleep-0"], cpus=[c])
+            children=[PowerDomain(idle_states=["WFI", "cpu-sleep-0"], cpu=c)
                       for c in a57s]),
         PowerDomain(
             idle_states=["cluster-sleep-0"],
-            children=[PowerDomain(idle_states=["WFI", "cpu-sleep-0"], cpus=[c])
-                      for c in a53s])],
+            children=[PowerDomain(idle_states=["WFI", "cpu-sleep-0"], cpu=c)
+                      for c in a53s])]),
     freq_domains=[a53s, a57s])

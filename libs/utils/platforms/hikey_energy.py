@@ -1,4 +1,3 @@
-from energy_model import ActiveState, EnergyModelNode, PowerDomain, EnergyModel
 # SPDX-License-Identifier: Apache-2.0
 #
 # Copyright (C) 2016, ARM Limited and contributors.
@@ -44,33 +43,26 @@ cpu_active_states = OrderedDict([
 
 cpu_idle_states = OrderedDict([('WFI', 15), ('cpu-sleep', 0), ('cluster-sleep', 0)])
 
-cpus = range(8)
-
-cluster_pds = [
-    PowerDomain(cpus=[0, 1, 2, 3], idle_states=["cluster-sleep"], parent=None),
-    PowerDomain(cpus=[4, 5, 6, 7], idle_states=["cluster-sleep"], parent=None),
-]
+def cpu_pd(cpu):
+    return PowerDomain(cpu=cpu, idle_states=['WFI', 'cpu-sleep'])
 
 def cpu_node(cpu):
-    cpu_pd=PowerDomain(cpus=[cpu],
-                       parent=cluster_pds[cpu / 4],
-                       idle_states=["WFI", "cpu-sleep"])
-
-    return EnergyModelNode([cpu],
+    return EnergyModelNode(cpu=cpu,
                            active_states=cpu_active_states,
-                           idle_states=cpu_idle_states,
-                           power_domain=cpu_pd,
-                           freq_domain=cpus)
-hikey_energy_levels = [
-    [cpu_node(c) for c in cpus],
-    [
-        EnergyModelNode(cpus=[0, 1, 2, 3],
+                           idle_states=cpu_idle_states)
+hikey_energy = EnergyModel(
+    root_node=EnergyModelRoot(children=[
+        EnergyModelNode(name='cluster0',
+                        children=[cpu_node(c) for c in [0, 1, 2, 3]],
                         active_states=cluster_active_states,
                         idle_states=cluster_idle_states),
-        EnergyModelNode(cpus=[4, 5, 6, 7],
+        EnergyModelNode(name='cluster1',
+                        children=[cpu_node(c) for c in [4, 5, 6, 7]],
                         active_states=cluster_active_states,
-                        idle_states=cluster_idle_states)
-    ],
-]
-
-hikey_energy = EnergyModel(levels=hikey_energy_levels)
+                        idle_states=cluster_idle_states)]),
+    root_power_domain=PowerDomain(idle_states=[], children=[
+        PowerDomain(idle_states=["cluster-sleep"], children=[
+            cpu_pd(c) for c in [0, 1, 2, 3]]),
+        PowerDomain(idle_states=["cluster-sleep"], children=[
+            cpu_pd(c) for c in [4, 5, 6, 7]])]),
+    freq_domains=[[0, 1, 2, 3, 4, 5, 6, 7]])

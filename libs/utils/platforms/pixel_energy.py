@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-from energy_model import ActiveState, EnergyModelNode, PowerDomain, EnergyModel
+from energy_model import (ActiveState, EnergyModelNode, EnergyModelRoot,
+                          PowerDomain, EnergyModel)
 
 from collections import OrderedDict
 
@@ -132,48 +132,33 @@ cluster_idle_states = OrderedDict([
 
 silvers = [0, 1]
 golds = [2, 3]
-silver_pd = PowerDomain(cpus=silvers, idle_states=["cluster-sleep-0"],
-                        parent=None)
-gold_pd = PowerDomain(cpus=golds, idle_states=["cluster-sleep-0"],
-                      parent=None)
 
 def silver_cpu_node(cpu):
-    cpu_pd=PowerDomain(cpus=[cpu],
-                       parent=silver_pd,
-                       idle_states=["WFI", "cpu-sleep-0"])
-
-    return EnergyModelNode([cpu],
+    return EnergyModelNode(cpu=cpu,
                            active_states=silver_cpu_active_states,
-                           idle_states=cpu_idle_states,
-                           power_domain=cpu_pd,
-                           freq_domain=silvers)
+                           idle_states=cpu_idle_states)
 
 def gold_cpu_node(cpu):
-    cpu_pd=PowerDomain(cpus=[cpu],
-                       parent=gold_pd,
-                       idle_states=["WFI", "cpu-sleep-0"])
-
-    return EnergyModelNode([cpu],
+    return EnergyModelNode(cpu=cpu,
                            active_states=gold_cpu_active_states,
-                           idle_states=cpu_idle_states,
-                           power_domain=cpu_pd,
-                           freq_domain=golds)
+                           idle_states=cpu_idle_states)
 
-levels = [
-    [
-        silver_cpu_node(0),
-        silver_cpu_node(1),
-        gold_cpu_node(2),
-        gold_cpu_node(3),
-    ],
-    [
-        EnergyModelNode(cpus=silvers,
-                        active_states=silver_cpu_active_states,
-                        idle_states=cpu_idle_states),
-        EnergyModelNode(cpus=golds,
-                        active_states=gold_cpu_active_states,
-                        idle_states=cpu_idle_states),
-    ],
-]
+def cpu_pd(cpu):
+    return PowerDomain(cpu=cpu, idle_states=["WFI", "cpu-sleep-0"])
 
-pixel_energy = EnergyModel(levels=levels)
+pixel_energy = EnergyModel(
+    root_node=EnergyModelRoot(children=[
+        EnergyModelNode(name='cluster_silver',
+                        children=[silver_cpu_node(c) for c in silvers],
+                        active_states=silver_cluster_active_states,
+                        idle_states=cluster_idle_states),
+        EnergyModelNode(name='cluster_gold',
+                        children=[gold_cpu_node(c) for c in golds],
+                        active_states=gold_cluster_active_states,
+                        idle_states=cluster_idle_states)]),
+    root_power_domain=PowerDomain(idle_states=[], children=[
+        PowerDomain(idle_states=['cluster-sleep-0'], children=[
+            cpu_pd(c) for c in silvers]),
+        PowerDomain(idle_states=['cluster-sleep-0'], children=[
+            cpu_pd(c) for c in golds])]),
+    freq_domains=[silvers, golds])
