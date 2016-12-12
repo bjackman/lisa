@@ -28,8 +28,7 @@ from test import experiment_test
 from trace import Trace
 from . import (EasTest, energy_aware_conf,
                WORKLOAD_DURATION_S,
-               WORKLOAD_PERIOD_MS,
-               OFFLOAD_MIGRATION_MIGRATOR_DELAY)
+               WORKLOAD_PERIOD_MS)
 
 class EnergyModelTest(EasTest):
     """
@@ -275,37 +274,4 @@ class EnergyModelWakeMigration(EnergyModelTest):
                 },
             },
         },
-    }
-
-class EnergyModelOffload(EnergyModelTest):
-    workloads = {
-        'early_and_migrators' : {
-            'type' : 'rt-app',
-            'conf' : {
-                'class' : 'profile',
-                'params' : {
-                    'early' : {
-                        'kind' : 'Periodic',
-                        'params' : {
-                            'duty_cycle_pct': 100,
-                            'duration_s': WORKLOAD_DURATION_S,
-                            'period_ms': WORKLOAD_PERIOD_MS,
-                        },
-                        # Create one task for each big CPU
-                        'tasks' : 'big',
-                    },
-                    'migrator' : {
-                        'kind' : 'Periodic',
-                        'params' : {
-                            'duty_cycle_pct': 100,
-                            'duration_s': WORKLOAD_DURATION_S,
-                            'period_ms': WORKLOAD_PERIOD_MS,
-                            'delay_s': OFFLOAD_MIGRATION_MIGRATOR_DELAY,
-                        },
-                        # Create one task for each big CPU
-                        'tasks' : 'big',
-                    },
-                },
-            },
-        }
     }
