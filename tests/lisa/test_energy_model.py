@@ -3,7 +3,7 @@ import unittest
 from unittest import TestCase
 
 
-from energy_model import (EnergyModel, ActiveState,
+from energy_model import (EnergyModel, ActiveState, EnergyModelCapacityError,
                           EnergyModelNode, EnergyModelRoot, PowerDomain)
 
 little_cluster_active_states = OrderedDict([
@@ -90,25 +90,45 @@ em = EnergyModel(
     freq_domains=[littles, bigs]
 )
 
-@unittest.skip("No worky")
+def set_of_tuples(lists):
+    """
+    Helper to turn a list of lists into a set of tuples i.e. [[]] -> {()}
+    """
+
 class TestOptimalPlacement(TestCase):
+    def assertPlacementListEqual(self, l1, l2):
+        s1 = set([tuple(l) for l in l1])
+        s2 = set([tuple(l) for l in l2])
+        self.assertSetEqual(s1, s2)
+
     def test_single_small(self):
-        placements = em.find_optimal_placements({"task1": 1})
-        # This will break if the order of the returned list changes, sorry.
-        self.assertEqual(placements, [{"task1": 0}, {"task1": 1}])
+        placements = em.get_optimal_placements({"task0": 1})
+        self.assertPlacementListEqual(placements, [[1, 0, 0, 0],
+                                                   [0, 1, 0, 0]])
 
     def test_single_big(self):
-        placements = em.find_optimal_placements({"task1": 350})
-        # This will break if the order of the returned list changes, sorry.
-        self.assertEqual(placements, [{"task1": 2}, {"task1": 3}])
+        placements = em.get_optimal_placements({"task0": 350})
+        self.assertPlacementListEqual(placements, [[0, 0, 350, 0],
+                                                   [0, 0, 0, 350]])
 
     def test_packing(self):
         tasks = {"task" + str(i) : 10 for i in range(5)}
-        placements = em.find_optimal_placements(tasks)
-        for placement in placements:
-            self.assertTrue(all(cpu in [0, 1] for cpu in placement.values()))
+        placements = em.get_optimal_placements(tasks)
+        total_util = sum(tasks.values())
+        self.assertPlacementListEqual(placements, [[total_util, 0, 0, 0],
+                                                   [0, total_util, 0, 0]])
 
-    # TODO test overutilized (should return nothing)
+    def test_overutilized_single(self):
+        self.assertRaises(EnergyModelCapacityError,
+                          em.get_optimal_placements, {'task0' : 401})
+
+    def test_overutilized_many(self):
+        total_cap = 400 * 2 + 200 * 2
+        task_size = 200
+        tasks = {'task' + str(i): task_size
+                 for i in range((total_cap / task_size) + 1)}
+        self.assertRaises(EnergyModelCapacityError,
+                          em.get_optimal_placements, tasks)
 
 class TestBiggestCpus(TestCase):
     def test_biggest_cpus(self):
@@ -155,26 +175,6 @@ class TestEnergyEst(TestCase):
                          + (0.5 * 5)  # LITTLE cluster idle power
                          + (0.5 * 10) # LITTLE cluster active power
                          + 2)         # big cluster power
-
-@unittest.skip("No worky")
-class TestIdleIdxs(TestCase):
-    def test_zero_util_deepest(self):
-        self.assertEqual(em._guess_idle_idxs([0] * 4), [2] * 4)
-
-    def test_single_cpu_used(self):
-        states = em._guess_idle_idxs([0, 0, 0, 1])
-        self.assertEqual(states, [2, 2, 1, -1])
-
-        states = em._guess_idle_idxs([0, 1, 0, 0])
-        self.assertEqual(states, [1, -1, 2, 2,])
-
-    def test_all_cpus_used(self):
-        states = em._guess_idle_idxs([1, 1, 1, 1])
-        self.assertEqual(states, [-1] * 4)
-
-    def test_one_cpu_per_cluster(self):
-        states = em._guess_idle_idxs([0, 1, 0, 1])
-        self.assertEqual(states, [1, -1] * 2)
 
 class TestIdleStates(TestCase):
     def test_zero_util_deepest(self):

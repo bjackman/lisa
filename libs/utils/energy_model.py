@@ -16,6 +16,8 @@
 #
 
 from collections import namedtuple
+from itertools import product
+import logging
 
 import pandas as pd
 import numpy as np
@@ -153,6 +155,10 @@ class EnergyModel(object):
         self.cpu_nodes = sorted_leaves(root_node)
         self.cpu_pds = sorted_leaves(root_power_domain)
         assert len(self.cpu_pds) == len(self.cpu_nodes)
+
+        self.root = root_node
+
+        self._log = logging.getLogger('EnergyModel')
 
     def _cpus_with_capacity(self, cap):
         """
@@ -296,48 +302,35 @@ class EnergyModel(object):
         Helper for estimate_from_cpu_util
 
         Like estimate_from_cpu_util but uses active time i.e. proportion of time
-        spent not-idle in the range 0.0 - 0.1.
+        spent not-idle in the range 0.0 - 1.0.
 
         If combine=False, return idle and active power as separate components.
         """
         power = 0
-
         ret = {}
 
-        raise NotImplementedError()
+        assert all(0.0 <= a <= 1.0 for a in cpu_active_time)
 
-        for cpu, node in enumerate(self.cpu_nodes):
-            assert [cpu] == node.cpus
+        for node in self.root.iter_nodes():
+            if not node.active_states or not node.idle_states:
+                continue
 
-            active_power = (node.active_states[freqs[cpu]].power
-                            * cpu_active_time[cpu])
-            idle_power = (node.idle_states[idle_states[cpu]]
-                          * (1 - cpu_active_time[cpu]))
-
-            if combine:
-                ret[(cpu,)] = active_power + idle_power
-            else:
-                ret[(cpu,)] = {}
-                ret[(cpu,)]["active"] = active_power
-                ret[(cpu,)]["idle"] = idle_power
-
-            power += active_power + idle_power
-
-        for node in self._levels["cluster"]:
             cpus = tuple(node.cpus)
-
-            # For now we assume clusters map to frequency domains 1:1
+            # For now we assume topology nodes with energy models do not overlap
+            # with frequency domains
             freq = freqs[cpus[0]]
             assert all(freqs[c] == freq for c in cpus[1:])
 
+            # The active time of a node is estimated as the max of the active
+            # times of its children.
             # This works great for the synthetic periodic workloads we use in
-            # Lisa (where all threads wake up at the same time) but is no good
-            # for real workloads.
+            # LISA (where all threads wake up at the same time) but is probably
+            # no good for real workloads.
             active_time = max(cpu_active_time[c] for c in cpus)
-
             active_power = node.active_states[freq].power * active_time
-            idle_power = (max([node.idle_states[idle_states[c]] for c in cpus])
-                          * (1 - active_time))
+
+            _idle_power = max(node.idle_states[idle_states[c]] for c in cpus)
+            idle_power = _idle_power * (1 - active_time)
 
             if combine:
                 ret[cpus] = active_power + idle_power
@@ -394,7 +387,6 @@ class EnergyModel(object):
                                                freqs, idle_states, combine=True)
 
     # TODO this takes exponential time, we can almost certainly avoid that.
-    # TODO clean up interface and document
     def get_optimal_placements(self, capacities):
         """
         Find the optimal distribution of work for a set of tasks
@@ -427,7 +419,7 @@ class EnergyModel(object):
         tasks = capacities.keys()
 
         num_candidates = len(self.cpus) ** len(tasks)
-        logging.info(
+        self._log.info(
             "%14s - Searching %d configurations for optimal task placement...",
             "EnergyModel", num_candidates)
 
@@ -455,5 +447,5 @@ class EnergyModel(object):
         # Whittle down to those that give the lowest energy estimate
         min_power = min(e["power"] for e in candidates.itervalues())
 
-        logging.info("%14s - Done", "EnergyModel")
+        self._log.info("%14s - Done", "EnergyModel")
         return [u for u, e in candidates.iteritems() if e["power"] == min_power]
