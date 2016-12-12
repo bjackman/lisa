@@ -147,8 +147,7 @@ class EnergyModelTest(EasTest):
             return pd.Series([power[c] for c in columns], index=columns)
         return task_utils_df.apply(exp_power, axis=1)
 
-    @experiment_test
-    def test_slack(self, experiment, tasks):
+    def _test_slack(self, experiment, tasks):
         """Test that the RTApp workload was given enough performance"""
 
         pa = PerfAnalysis(experiment.out_dir)
@@ -160,8 +159,7 @@ class EnergyModelTest(EasTest):
                 raise AssertionError("task {} missed {}% of activations".format(
                     task, bad_activations_pct))
 
-    @experiment_test
-    def test_task_placement(self, experiment, tasks):
+    def _test_task_placement(self, experiment, tasks):
         exp_power = self.get_expected_power_df(experiment)
         est_power = self.get_power_df(experiment)
 
@@ -188,6 +186,12 @@ class OneSmallTask(EnergyModelTest):
             },
         }
     }
+    @experiment_test
+    def test_slack(self, experiment, tasks):
+        self._test_slack(experiment, tasks)
+    @experiment_test
+    def test_task_placement(self, experiment, tasks):
+        self._test_task_placement(experiment, tasks)
 
 class ThreeSmallTasks(EnergyModelTest):
     workloads = {
@@ -205,6 +209,12 @@ class ThreeSmallTasks(EnergyModelTest):
             },
         }
     }
+    @experiment_test
+    def test_slack(self, experiment, tasks):
+        self._test_slack(experiment, tasks)
+    @experiment_test
+    def test_task_placement(self, experiment, tasks):
+        self._test_task_placement(experiment, tasks)
 
 class TwoBigTasks(EnergyModelTest):
     workloads = {
@@ -222,6 +232,12 @@ class TwoBigTasks(EnergyModelTest):
             },
         }
     }
+    @experiment_test
+    def test_slack(self, experiment, tasks):
+        self._test_slack(experiment, tasks)
+    @experiment_test
+    def test_task_placement(self, experiment, tasks):
+        self._test_task_placement(experiment, tasks)
 
 class TwoBigThreeSmall(EnergyModelTest):
     workloads = {
@@ -252,6 +268,12 @@ class TwoBigThreeSmall(EnergyModelTest):
             },
         },
     }
+    @experiment_test
+    def test_slack(self, experiment, tasks):
+        self._test_slack(experiment, tasks)
+    @experiment_test
+    def test_task_placement(self, experiment, tasks):
+        self._test_task_placement(experiment, tasks)
 
 class EnergyModelWakeMigration(EnergyModelTest):
     workloads = {
@@ -275,3 +297,9 @@ class EnergyModelWakeMigration(EnergyModelTest):
             },
         },
     }
+    @experiment_test
+    def test_slack(self, experiment, tasks):
+        self._test_slack(experiment, tasks)
+    @experiment_test
+    def test_task_placement(self, experiment, tasks):
+        self._test_task_placement(experiment, tasks)
