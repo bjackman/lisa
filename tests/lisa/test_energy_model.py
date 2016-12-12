@@ -2,9 +2,15 @@ from collections import OrderedDict
 import unittest
 from unittest import TestCase
 
-
 from energy_model import (EnergyModel, ActiveState, EnergyModelCapacityError,
                           EnergyModelNode, EnergyModelRoot, PowerDomain)
+
+"""
+A very basic test for the EnergyModel class.
+
+Just creates a simple instance of EnergyModel describing a hypothetical
+big.LITTLE system and smoke-tests the methods and properties.
+"""
 
 little_cluster_active_states = OrderedDict([
     (1000, ActiveState(power=10)),
@@ -97,6 +103,9 @@ def set_of_tuples(lists):
 
 class TestOptimalPlacement(TestCase):
     def assertPlacementListEqual(self, l1, l2):
+        """
+        Assert that a pair of lists of lists contain the same lists in any order
+        """
         s1 = set([tuple(l) for l in l1])
         s2 = set([tuple(l) for l in l2])
         self.assertSetEqual(s1, s2)
@@ -133,6 +142,10 @@ class TestOptimalPlacement(TestCase):
 class TestBiggestCpus(TestCase):
     def test_biggest_cpus(self):
         self.assertEqual(em.biggest_cpus, [2, 3])
+
+class TestLittlestCpus(TestCase):
+    def test_littlest_cpus(self):
+        self.assertEqual(em.littlest_cpus, [0, 1])
 
 class TestMaxCap(TestCase):
     def test_max_cap(self):

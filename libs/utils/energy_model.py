@@ -31,6 +31,11 @@ ActiveState = namedtuple('ActiveState', ['capacity', 'power'])
 ActiveState.__new__.__defaults__ = (None, None)
 
 class _CpuTree(object):
+    """
+    Abstract representation of a CPU topology.
+
+    Each node contains either a single CPU or a set of child nodes.
+    """
     def __init__(self, cpu, children):
         if (cpu is None) == (children is None):
             raise ValueError('Provide exactly one of: cpus or children')
@@ -76,6 +81,9 @@ class _CpuTree(object):
         return self._iter(False)
 
 class EnergyModelNode(_CpuTree):
+    """
+    Describes topology and energy data for an EnergyModel.
+    """
     def __init__(self, active_states, idle_states,
                  cpu=None, children=None, name=None):
         super(EnergyModelNode, self).__init__(cpu, children)
@@ -95,11 +103,24 @@ class EnergyModelNode(_CpuTree):
         return self.idle_states.keys().index(state)
 
 class EnergyModelRoot(EnergyModelNode):
+    """
+    Convenience class for root of an EnergyModelNode tree.
+
+    Just like EnergyModelNode except that active_states and idle_states aren't
+    required.
+    """
     def __init__(self, active_states=None, idle_states=None, *args, **kwargs):
         return super(EnergyModelRoot, self).__init__(
             active_states, idle_states, *args, **kwargs)
 
 class PowerDomain(_CpuTree):
+    """
+    Describes the power domain hierarchy for an EnergyModel.
+
+    Note that the idle_states are expected to be just a list of names - power
+    data is stored elsewhere (EnergyModelNode::idle_states) using these names as
+    keys. They also may be an empty list.
+    """
     def __init__(self, idle_states, cpu=None, children=None):
         super(PowerDomain, self).__init__(cpu, children)
         self.idle_states = idle_states
@@ -111,23 +132,28 @@ class EnergyModel(object):
     An energy model consists of
 
     - A CPU topology, representing the physical (cache/interconnect) topology of
-      the CPUs. Each node stores the energy usage of that node's hardware when
-      it is in each active or idle state. They also store a compute capacity eat
-      each frequency, but this is only meaningful for leaf nodes (CPUs) and may
-      be None at higher levels.
+      the CPUs.
+      Each node stores the energy usage of that node's hardware when it is in
+      each active or idle state. They also store a compute capacity eat each
+      frequency, but this is only meaningful for leaf nodes (CPUs) and may be
+      None at higher levels. These capacity values are relative; the maximum
+      capacity would usually be 1024, the value of SCHED_CAPACITY_SCALE in the
+      Linux kernel scheduler.
+      Use EnergyModelNodes to describe this.
 
     - A power domain topology, representing the hierarchy of areas that can be
-      powered down (idled). The power domains are a single tree. Leaf nodes must
-      contain exactly one CPU and the root node must indirectly contain every
-      CPU. Each power domain has a list (maybe empty) of names of idle states
-      that that domain can enter.
+      powered down (idled).
+      The power domains are a single tree. Leaf nodes must contain exactly one
+      CPU and the root node must indirectly contain every CPU. Each power domain
+      has a list (maybe empty) of names of idle states that that domain can
+      enter.
+      Use PowerDomains to describe this.
 
     - A set of frequency domains, representing groups of CPUs whose clock
       frequencies must be equal (probably because they share a clock). The
       frequency domains must be a partition of the CPUs.
     """
 
-    # TODO check that this is the highest cap available
     capacity_scale = 1024
 
     def __init__(self, root_node, root_power_domain, freq_domains):
@@ -152,13 +178,18 @@ class EnergyModel(object):
             assert all(len(n.cpus) == 1 for n in ret)
             return ret
 
+        self.root = root_node
         self.cpu_nodes = sorted_leaves(root_node)
         self.cpu_pds = sorted_leaves(root_power_domain)
         assert len(self.cpu_pds) == len(self.cpu_nodes)
 
-        self.root = root_node
-
         self._log = logging.getLogger('EnergyModel')
+
+        max_cap = max(n.max_capacity for n in self.cpu_nodes)
+        if max_cap != self.capacity_scale:
+            self._log.warning(
+                'Unusual max capacity (%s), overriding capacity_scale', max_cap)
+            self.capacity_scale = max_cap
 
     def _cpus_with_capacity(self, cap):
         """
@@ -170,14 +201,19 @@ class EnergyModel(object):
     @property
     @memoized
     def biggest_cpus(self):
-        max_cap = max(n.max_capacity for n in self.cpu_nodes)
-        return self._cpus_with_capacity(max_cap)
+        """
+        The CPUs with the highest compute capacity at their highest frequency
+        """
+        return self._cpus_with_capacity(self.capacity_scale)
 
     @property
     @memoized
     def littlest_cpus(self):
-        min_cap = min(n.max_capacity for n in self._levels[CPU_LEVEL])
-        return self._cpus_with_cap(min_cap)
+        """
+        The CPUs with the lowest compute capacity at their highest frequency
+        """
+        min_cap = min(n.max_capacity for n in self.cpu_nodes)
+        return self._cpus_with_capacity(min_cap)
 
     @property
     @memoized
@@ -230,10 +266,11 @@ class EnergyModel(object):
         # One CPU active.
         # Note that CPU 2 has no work but is assumed to never be able to enter
         # any "cluster" state.
-        [0, 0, 0, 1] -> ["cluster-sleep-1", "cpu-sleep", "WFI","WFI"]
+        [0, 0, 0, 1] -> ["cluster-sleep-1", "cluster-sleep-1",
+                         "cpu-sleep","WFI"]
 
         :param cpus_active: list where bool(cpus_active[N]) is False iff no
-        tasks will run on CPU N.
+                            tasks will run on CPU N.
         """
         states = self._guess_idle_states(cpus_active)
         return [s or c.idle_states.keys()[0]
@@ -241,10 +278,6 @@ class EnergyModel(object):
 
     def _guess_freqs(self, util_distrib):
         overutilized = False
-
-        # TODO would be simpler to iter over domains and set all CPUs. Need to
-        # store the set of domains somewhere.
-
         # Find what frequency each CPU would need if it was alone in its
         # frequency domain
         ideal_freqs = [0 for _ in self.cpus]
@@ -290,11 +323,6 @@ class EnergyModel(object):
         """
         freqs, _ = self._guess_freqs(util_distrib)
         return freqs
-
-    def would_overutilize(self, util_distrib):
-        # TODO simplify
-        _, overutilized = self._guess_freqs(util_distrib)
-        return overutilized
 
     def _estimate_from_active_time(self, cpu_active_time, freqs, idle_states,
                                    combine):
@@ -386,22 +414,21 @@ class EnergyModel(object):
         return self._estimate_from_active_time(cpu_active_time,
                                                freqs, idle_states, combine=True)
 
-    # TODO this takes exponential time, we can almost certainly avoid that.
     def get_optimal_placements(self, capacities):
         """
         Find the optimal distribution of work for a set of tasks
 
-        Take as input a dict mapping tasks to expected utilization
-        values. These tasks are assumed not to change; they have a single static
-        utilization value. A set of single-phase periodic RT-App tasks is an
-        example of a suitable workload for this model.
+        Take as input a dict mapping tasks to expected utilization values. These
+        tasks are assumed not to change; they have a single static utilization
+        value. A set of single-phase periodic RT-App tasks is an example of a
+        suitable workload for this model.
 
-        Returns a list of candidates which are estimated to be optimal
-        in terms of power consumption, but that do not result in any CPU
-        becoming over-utilized. Each candidate is a list U where U[n] is the
-        expected utilization of CPU n under the task placement. Multiple task
-        placements that result in the same utilization distribution are
-        considered equivalent.
+        Returns a list of candidates which are estimated to be optimal in terms
+        of power consumption, but that do not result in any CPU becoming
+        over-utilized. Each candidate is a list U where U[n] is the expected
+        utilization of CPU n under the task placement. Multiple task placements
+        that result in the same utilization distribution are considered
+        equivalent.
 
         If no such candidates exist, i.e. the system being modeled cannot
         satisfy the workload's throughput requirements, an
@@ -441,11 +468,12 @@ class EnergyModel(object):
         if not candidates:
             # The system can't provide full throughput to this workload.
             raise EnergyModelCapacityError(
-                "Can't handle workload - total cap = {}, max cap = {}".format(
-                    sum(capacities.values()), max(capacities.values())))
+                "Can't handle workload - total cap = {}".format(
+                    sum(capacities.values())))
 
         # Whittle down to those that give the lowest energy estimate
         min_power = min(e["power"] for e in candidates.itervalues())
+        ret = [u for u, e in candidates.iteritems() if e["power"] == min_power]
 
         self._log.info("%14s - Done", "EnergyModel")
-        return [u for u, e in candidates.iteritems() if e["power"] == min_power]
+        return ret
