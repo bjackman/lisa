@@ -447,8 +447,8 @@ class EnergyModel(object):
 
         num_candidates = len(self.cpus) ** len(tasks)
         self._log.info(
-            "%14s - Searching %d configurations for optimal task placement...",
-            "EnergyModel", num_candidates)
+            '%14s - Searching %d configurations for optimal task placement...',
+            'EnergyModel', num_candidates)
 
         candidates = {}
         for cpus in product(self.cpus, repeat=len(tasks)):
@@ -472,8 +472,8 @@ class EnergyModel(object):
                     sum(capacities.values())))
 
         # Whittle down to those that give the lowest energy estimate
-        min_power = min(e["power"] for e in candidates.itervalues())
-        ret = [u for u, e in candidates.iteritems() if e["power"] == min_power]
+        min_power = min(e['power'] for e in candidates.itervalues())
+        ret = [u for u, e in candidates.iteritems() if e['power'] == min_power]
 
-        self._log.info("%14s - Done", "EnergyModel")
+        self._log.info('%14s - Done', 'EnergyModel')
         return ret
