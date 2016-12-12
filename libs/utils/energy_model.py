@@ -30,6 +30,8 @@ class _CpuTree(object):
         if (cpu is None) == (children is None):
             raise ValueError('Provide exactly one of: cpus or children')
 
+        self.parent = None
+
         if cpu is not None:
             self.cpus = [cpu]
             self.children = []
@@ -94,34 +96,65 @@ class EnergyModelRoot(EnergyModelNode):
 
 class PowerDomain(_CpuTree):
     def __init__(self, idle_states, cpu=None, children=None):
+        super(PowerDomain, self).__init__(cpu, children)
         self.idle_states = idle_states
 
 class EnergyModel(object):
     """
     Represents hierarchical CPU topology with power and capacity data
 
-    Describes a CPU topology similarly to trappy's Topology class, additionally
-    describing relative CPU compute capacity, frequency domains and energy costs
-    in various configurations.
+    An energy model consists of
 
-    The topology is stored in 'levels', currently hard-coded to be 'cpu' and
-    'cluster'. Each level is a list of EnergyModelNode objects. An EnergyModel
-    node is a CPU or group of CPUs with associated power and (optionally)
-    capacity characteristics.
+    - A CPU topology, representing the physical (cache/interconnect) topology of
+      the CPUs. Each node stores the energy usage of that node's hardware when
+      it is in each active or idle state. They also store a compute capacity eat
+      each frequency, but this is only meaningful for leaf nodes (CPUs) and may
+      be None at higher levels.
+
+    - A power domain topology, representing the hierarchy of areas that can be
+      powered down (idled). The power domains are a single tree. Leaf nodes must
+      contain exactly one CPU and the root node must indirectly contain every
+      CPU. Each power domain has a list (maybe empty) of names of idle states
+      that that domain can enter.
+
+    - A set of frequency domains, representing groups of CPUs whose clock
+      frequencies must be equal (probably because they share a clock). The
+      frequency domains must be a partition of the CPUs.
     """
 
     # TODO check that this is the highest cap available
     capacity_scale = 1024
 
-    def __init__(self, root_node, power_domains, freq_domains):
+    def __init__(self, root_node, root_power_domain, freq_domains):
         self.cpus = root_node.cpus
         if self.cpus != range(len(self.cpus)):
-            raise ValueError('CPUs are sparse or out of order')
+            raise ValueError('CPU IDs are sparse')
 
-        self.cpu_nodes = sorted(list(root_node.iter_leaves()),
-                                key=lambda n: n.cpus[0])
+        fd_intersection = set().intersection(*freq_domains)
+        if fd_intersection:
+            raise ValueError('CPUs {} exist in multiple freq domains'.format(
+                fd_intersection))
+        fd_difference = set(self.cpus) - set().union(*freq_domains)
+        if fd_difference:
+            raise ValueError('CPUs {} not in any frequency domain'.format(
+                fd_difference))
+        self.freq_domains = freq_domains
+
+        def sorted_leaves(root):
+            # Get a list of the leaf (cpu) nodes of a _CpuTree in order of the
+            # CPU ID
+            ret = sorted(list(root.iter_leaves()), key=lambda n: n.cpus[0])
+            assert all(len(n.cpus) == 1 for n in ret)
+            return ret
+
+        self.cpu_nodes = sorted_leaves(root_node)
+        self.cpu_pds = sorted_leaves(root_power_domain)
+        assert len(self.cpu_pds) == len(self.cpu_nodes)
 
     def _cpus_with_capacity(self, cap):
+        """
+        Helper method to find the CPUs whose max capacity equals cap
+        """
         return [c for c in self.cpus
                 if self.cpu_nodes[c].max_capacity == cap]
 
@@ -129,7 +162,7 @@ class EnergyModel(object):
     @memoized
     def biggest_cpus(self):
         max_cap = max(n.max_capacity for n in self.cpu_nodes)
-        return self._cpus_with_cap(max_cap)
+        return self._cpus_with_capacity(max_cap)
 
     @property
     @memoized
@@ -156,7 +189,7 @@ class EnergyModel(object):
                 return pd.idle_states[-1] if len(pd.idle_states) else None
             return None
 
-        return [find_deepest(c.power_domain) for c in self._levels["cpu"]]
+        return [find_deepest(pd) for pd in self.cpu_pds]
 
     def guess_idle_states(self, cpus_active):
         """Pessimistically guess the idle states that each CPU may enter
@@ -195,7 +228,7 @@ class EnergyModel(object):
         """
         states = self._guess_idle_states(cpus_active)
         return [s or c.idle_states.keys()[0]
-                for s, c in zip(states, self._levels["cpu"])]
+                for s, c in zip(states, self.cpu_nodes)]
 
     def _guess_freqs(self, util_distrib):
         overutilized = False
@@ -205,8 +238,8 @@ class EnergyModel(object):
 
         # Find what frequency each CPU would need if it was alone in its
         # frequency domain
-        ideal_freqs = [0 for _ in range(self.num_cpus)]
-        for node in self._levels["cpu"]:
+        ideal_freqs = [0 for _ in self.cpus]
+        for node in self.cpu_nodes:
             [cpu] = node.cpus
             required_cap = util_distrib[cpu]
 
@@ -220,14 +253,12 @@ class EnergyModel(object):
                 ideal_freqs[cpu] = max(node.active_states.keys())
                 overutilized = True
 
+        # Rectify the frequencies among domains
         freqs = [0 for _ in ideal_freqs]
-        for node in self._levels["cpu"]:
-            [cpu] = node.cpus
-
-            # Each CPU has to run at the max frequency required by any in its
-            # frequency domain
-            freq_domain = node.freq_domain
-            freqs[cpu] = max(ideal_freqs[c] for c in freq_domain)
+        for domain in self.freq_domains:
+            domain_freq = max(ideal_freqs[c] for c in domain)
+            for cpu in domain:
+                freqs[cpu] = domain_freq
 
         return freqs, overutilized
 
@@ -270,7 +301,9 @@ class EnergyModel(object):
 
         ret = {}
 
-        for cpu, node in enumerate(self._levels["cpu"]):
+        raise NotImplementedError()
+
+        for cpu, node in enumerate(self.cpu_nodes):
             assert [cpu] == node.cpus
 
             active_power = (node.active_states[freqs[cpu]].power
@@ -349,7 +382,7 @@ class EnergyModel(object):
             idle_states = self.guess_idle_states(util_distrib)
 
         cpu_active_time = []
-        for cpu, node in enumerate(self._levels["cpu"]):
+        for cpu, node in enumerate(self.cpu_nodes):
             assert [cpu] == node.cpus
             cap = node.active_states[freqs[cpu]].capacity
             cpu_active_time.append(min(float(util_distrib[cpu]) / cap, 1.0))
