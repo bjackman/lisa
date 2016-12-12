@@ -23,6 +23,7 @@ import pandas as pd
 
 from bart.common.Utils import area_under_curve, select_window
 from energy_model import EnergyModelCapacityError
+from perf_analysis import PerfAnalysis
 from test import experiment_test
 from trace import Trace
 from . import (EasTest, energy_aware_conf,
@@ -48,6 +49,9 @@ class EnergyModelTest(EasTest):
 
     The tasks were placed according to one of the optimal placements.
     """
+
+    negative_slack_allowed_pct = 5
+    """Percentage of RT-App task activations with negative slack allowed"""
 
     @classmethod
     def _getExperimentsConf(cls, *args, **kwargs):
@@ -143,6 +147,19 @@ class EnergyModelTest(EasTest):
             columns = power.keys()
             return pd.Series([power[c] for c in columns], index=columns)
         return task_utils_df.apply(exp_power, axis=1)
+
+    @experiment_test
+    def test_slack(self, experiment, tasks):
+        """Test that the RTApp workload was given enough performance"""
+
+        pa = PerfAnalysis(experiment.out_dir)
+        for task in tasks:
+            slack = pa.df(task)["Slack"]
+
+            bad_activations_pct = len(slack[slack < 0]) * 100. / len(slack)
+            if bad_activations_pct > self.negative_slack_allowed_pct:
+                raise AssertionError("task {} missed {}% of activations".format(
+                    task, bad_activations_pct))
 
     @experiment_test
     def test_task_placement(self, experiment, tasks):
