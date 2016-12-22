@@ -54,11 +54,13 @@ class _CpuTree(object):
 
         if cpu is not None:
             self.cpus = (cpu,)
+            self.cpu = cpu
             self.children = []
         else:
             if len(children) == 0:
                 raise ValueError('children cannot be empty')
             self.cpus = tuple(sorted(set().union(*[n.cpus for n in children])))
+            self.cpu = None
             self.children = children
             for child in children:
                 child.parent = self
@@ -148,6 +150,8 @@ class EnergyModelNode(_CpuTree):
                  have a default name of "cpuN" where N is the cpu number.
 
     :ivar cpus: CPUs contained in this node. Includes those of child nodes.
+    :ivar cpu: For convenience, this holds the single CPU contained by leaf
+               nodes. ``None`` for non-leaf nodes.
     """
     def __init__(self, active_states, idle_states,
                  cpu=None, children=None, name=None):
