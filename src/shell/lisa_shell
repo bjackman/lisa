@@ -266,7 +266,9 @@ EOF
 
 function _lisa-test {
 TEST=${1}
-nosetests -v tests/$TEST
+nosetests -v --nocapture --nologcapture \
+          --logging-config=logging.conf \
+          $TEST
 }
 
 function lisa-test {
@@ -305,7 +307,7 @@ echo
 ################################################################################
 
 # Setup Shell variables
-PS1="\[${LISASHELL_BLUE}\][LISAShell \[${LISASHELL_LCYAN}\]\W\[${LISASHELL_BLUE}\]] \> \[${LISASHELL_DEFAULT}\]"
+PS1="\[${LISASHELL_BLUE}\][LISAShell \[${LISASHELL_LCYAN}\]\W\[${LISASHELL_BLUE}\]] \> \[${LISASHELL_RESET}\]"
 
 # Dump out a nice LISA Shell logo
 clear

@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
-import logging
 import os
 import unittest
+import logging
 
 from bart.sched.SchedAssert import SchedAssert
 from bart.sched.SchedMultiAssert import SchedMultiAssert
@@ -26,6 +26,8 @@ import wrapt
 
 from env import TestEnv
 from executor import Executor
+from trace import Trace
+
 
 class LisaTest(unittest.TestCase):
     """
@@ -57,12 +59,7 @@ class LisaTest(unittest.TestCase):
         Set up logging and trigger running experiments
         """
 
-        cls.logger = logging.getLogger('test')
-        cls.logger.setLevel(logging.INFO)
-        if 'loglevel' in kwargs:
-            cls.logger.setLevel(kwargs['loglevel'])
-            kwargs.pop('loglevel')
-
+        cls.logger = logging.getLogger('LisaTest')
         cls._runExperiments()
 
     @classmethod
@@ -91,7 +88,7 @@ class LisaTest(unittest.TestCase):
         Default experiments execution engine
         """
 
-        cls.logger.info("%14s - Setup tests execution engine...", "LisaTest")
+        cls.logger.info('Setup tests execution engine...')
         test_env = TestEnv(test_conf=cls._getTestConf())
 
         experiments_conf = cls._getExperimentsConf(test_env)
@@ -104,7 +101,7 @@ class LisaTest(unittest.TestCase):
         # Execute pre-experiments code defined by the test
         cls._experimentsInit()
 
-        cls.logger.info("%14s - Experiments execution...", "LisaTest")
+        cls.logger.info('Experiments execution...')
         cls.executor.run()
 
         # Execute post-experiments code defined by the test
@@ -127,7 +124,8 @@ class LisaTest(unittest.TestCase):
         """
         Return a SchedAssert over the task provided
         """
-        return SchedAssert(experiment.out_dir, self.te.topology, execname=task)
+        return SchedAssert(
+            self.get_trace(experment), self.te.topology, execname=task)
 
     @memoized
     def get_multi_assert(self, experiment, task_filter=""):
@@ -138,9 +136,28 @@ class LisaTest(unittest.TestCase):
         experiment.
         """
         tasks = experiment.wload.tasks.keys()
-        return SchedMultiAssert(experiment.out_dir,
+        return SchedMultiAssert(self.get_trace(experiment).ftrace,
                                 self.te.topology,
                                 [t for t in tasks if task_filter in t])
+
+    def get_trace(self, experiment):
+        if not hasattr(self, "__traces"):
+            self.__traces = {}
+        if experiment.out_dir in self.__traces:
+            return self.__traces[experiment.out_dir]
+
+        if ('ftrace' not in experiment.conf['flags']
+            or 'ftrace' not in self.test_conf):
+            raise ValueError(
+                'Tracing not enabled. If this test needs a trace, add "ftrace" '
+                'to your test/experiment configuration flags')
+
+        events = self.test_conf['ftrace']['events']
+        tasks = experiment.wload.tasks.keys()
+        trace = Trace(self.te.platform, experiment.out_dir, events, tasks)
+
+        self.__traces[experiment.out_dir] = trace
+        return trace
 
     def get_start_time(self, experiment):
         """
@@ -167,9 +184,9 @@ class LisaTest(unittest.TestCase):
         """
 
         end_times = {}
+        ftrace = self.get_trace(experiment).ftrace
         for task in experiment.wload.tasks.keys():
-            sched_assert = SchedAssert(experiment.out_dir, self.te.topology,
-                                       execname=task)
+            sched_assert = SchedAssert(ftrace, self.te.topology, execname=task)
             end_times[task] = sched_assert.getEndTime()
 
         return end_times
