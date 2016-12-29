@@ -126,7 +126,7 @@ class ForkMigration(EasTest):
                 "conf" : {
                     "class" : "profile",
                     "params" : {
-                        "small" : {
+                        "fmig" : {
                             "kind" : "Periodic",
                             "params" : {
                                 "duty_cycle_pct": 10,
@@ -173,14 +173,19 @@ class SmallTaskPacking(EasTest):
             "small_tasks" : {
                 "type" : "rt-app",
                 "conf" : {
-                    "class" : "periodic",
+                    "class" : "profile",
                     "params" : {
-                        "duty_cycle_pct": 10,
-                        "duration_s": WORKLOAD_DURATION_S,
-                        "period_ms": WORKLOAD_PERIOD_MS,
-                    },
-                    # Create one task for each CPU
-                    "tasks" : "cpus",
+                        "taskpack" : {
+                              "kind" : "Periodic",
+	                    "params" : {
+	                        "duty_cycle_pct": 10,
+	                        "duration_s": WORKLOAD_DURATION_S,
+	                        "period_ms": WORKLOAD_PERIOD_MS,
+	                    },
+	                    # Create one task for each CPU
+	                    "tasks" : "cpus",
+	                },
+	            },
                 },
             },
         },
