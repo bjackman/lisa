@@ -47,7 +47,8 @@ class EnergyModelTest(EasTest):
     def _getExperimentsConf(cls, *args, **kwargs):
         return {
             'wloads' : cls.workloads,
-            'confs' : [energy_aware_conf]
+            'confs' : [energy_aware_conf],
+            'iterations' : 5,
         }
 
     def get_task_utils_df(self, experiment):
