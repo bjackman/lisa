@@ -36,7 +36,7 @@ OFFLOAD_MIGRATION_MIGRATOR_DELAY = 1
 
 energy_aware_conf = {
     'tag' : 'energy_aware',
-    'flags' : 'ftrace',
+    'flags' : ['ftrace', 'freeze_userspace'],
     'sched_features' : 'ENERGY_AWARE',
 }
 
