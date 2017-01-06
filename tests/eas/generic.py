@@ -231,7 +231,7 @@ class OneSmallTask(EnergyModelTest):
                 'class' : 'periodic',
                 'params' : {
                     'duty_cycle_pct': 20,
-                    'duration_s': 5,
+                    'duration_s': WORKLOAD_DURATION_S,
                     'period_ms': 10,
                 },
                 'tasks' : 1,
@@ -257,7 +257,7 @@ class ThreeSmallTasks(EnergyModelTest):
                 'class' : 'periodic',
                 'params' : {
                     'duty_cycle_pct': 20,
-                    'duration_s': 5,
+                    'duration_s': WORKLOAD_DURATION_S,
                     'period_ms': 10,
                 },
                 'tasks' : 3,
@@ -283,7 +283,7 @@ class TwoBigTasks(EnergyModelTest):
                 'class' : 'periodic',
                 'params' : {
                     'duty_cycle_pct': 80,
-                    'duration_s': 5,
+                    'duration_s': WORKLOAD_DURATION_S,
                     'period_ms': 10,
                 },
                 'tasks' : 2,
