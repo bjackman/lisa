@@ -474,7 +474,8 @@ class EnergyModel(object):
         ret["power"] = power
         return ret
 
-    def estimate_from_cpu_util(self, util_distrib, freqs=None, idle_states=None):
+    def estimate_from_cpu_util(self, util_distrib, freqs=None, idle_states=None,
+                               combine=True):
         """
         Estimate the energy usage of the system under a utilization distribution
 
@@ -519,7 +520,8 @@ class EnergyModel(object):
             cpu_active_time.append(min(float(util_distrib[cpu]) / cap, 1.0))
 
         return self._estimate_from_active_time(cpu_active_time,
-                                               freqs, idle_states, combine=True)
+                                               freqs, idle_states,
+                                               combine=combine)
 
     def get_optimal_placements(self, capacities):
         """Find the optimal distribution of work for a set of tasks
