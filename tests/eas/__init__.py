@@ -21,7 +21,7 @@ from bart.sched.SchedMultiAssert import SchedMultiAssert
 from devlib.target import TargetError
 from test import LisaTest
 
-WORKLOAD_DURATION_S = 5
+WORKLOAD_DURATION_S = 2
 WORKLOAD_PERIOD_MS =  10
 SWITCH_WINDOW_HALF = 0.5
 SMALL_DCYCLE = 10
