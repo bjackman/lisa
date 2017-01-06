@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 from itertools import product
 import logging
 
@@ -104,6 +104,9 @@ class EnergyModelNode(_CpuTree):
                           values. Compute capacity data is optional for
                           non-leaf nodes.
     :param idle_states: Dict mapping idle state names to power usage values
+                        If you want to use :meth:`idle_state_by_idx`, use an
+                        OrderedDict, sorted such that shallower idle states come
+                        first.
     :param cpu: The CPU this node represents. If provided, this is a leaf node.
     :param children: Non-empty list of child :class:`EnergyModelNode` objects
     :param name: Optional human-readable name for this node. Leaf (CPU) nodes
@@ -126,6 +129,27 @@ class EnergyModelNode(_CpuTree):
     def max_capacity(self):
         """Compute capacity at highest frequency"""
         return max(s.capacity for s in self.active_states.values())
+
+    def idle_state_by_idx(self, idx):
+        """ TODO doc and test"""
+        if not isinstance(self.idle_states, OrderedDict):
+            f = 'idle_states is {}, must be collections.OrderedDict'
+            raise ValueError(f.format(type(self.idle_states)))
+
+        if self.idle_states and idx < len(self.idle_states):
+            return self.idle_states.keys()[idx]
+
+        ret = None
+        if self.parent:
+            try:
+                ret = self.parent.idle_state_by_idx(idx)
+            except KeyError:
+                pass
+
+        if ret is not None:
+            return ret
+
+        raise KeyError('No idle state with index {}'.format(idx))
 
 class EnergyModelRoot(EnergyModelNode):
     """
