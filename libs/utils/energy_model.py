@@ -594,7 +594,7 @@ class EnergyModel(object):
         self._log.info('%14s - Done', 'EnergyModel')
         return ret
 
-    def mimic_sched_group_energy(self, trace, style='BRENDAN', combine=True):
+    def mimic_sched_group_energy(self, trace, style='BRENDAN', component=None):
         """
         TODO doc
         TODO test
@@ -629,7 +629,11 @@ class EnergyModel(object):
 
             nrg = self.estimate_from_cpu_util(
                 util_distrib=utils, freqs=freqs, idle_states=idles,
-                combine=combine)
+                combine=not bool(component))
+
+            if component:
+                del nrg['power']
+                nrg = {k: nrg[k][component] for k in nrg}
 
             # TODO this bit is slow. Dunno why, probably reallocating
             # memory. Maybe we can speed this up using DataFrame.apply instead
