@@ -23,6 +23,7 @@ import pandas as pd
 import numpy as np
 
 from devlib.utils.misc import memoized
+from trappy.stats.grammar import Parser
 
 """Classes for modeling and estimating energy usage of CPU systems
 """
@@ -449,7 +450,7 @@ class EnergyModel(object):
             # For now we assume topology nodes with energy models do not overlap
             # with frequency domains
             freq = freqs[cpus[0]]
-            assert all(freqs[c] == freq for c in cpus[1:])
+            # assert all(freqs[c] == freq for c in cpus[1:])
 
             # The active time of a node is estimated as the max of the active
             # times of its children.
@@ -591,4 +592,48 @@ class EnergyModel(object):
         ret = [u for u, e in candidates.iteritems() if e['power'] == min_power]
 
         self._log.info('%14s - Done', 'EnergyModel')
+        return ret
+
+    def mimic_sched_group_energy(self, trace, style='BRENDAN', combine=True):
+        """
+        TODO doc
+        TODO test
+        """
+        parser = Parser(trace.ftrace)
+        freq = parser.solve('cpu_frequency:frequency')
+        idle = parser.solve('cpu_idle:state')
+        util = parser.solve('sched_load_avg_cpu:util_avg')
+
+        assert all(df.columns.tolist() == self.cpus for df in [freq, idle, util])
+
+        columns = [tuple(n.cpus) for n in self.root.iter_nodes()
+                   if n.active_states and n.idle_states]
+
+        _inputs = pd.concat([freq, idle, util], axis=1,
+                           keys=['freq', 'idle', 'util'])
+        inputs = _inputs.fillna(method='ffill').dropna().drop_duplicates()
+
+        ret = pd.DataFrame(columns=columns)
+
+        from time import time as pc
+        pandas_time = 0
+        me_time = 0
+
+        for time, input_row in inputs.iterrows():
+            freqs = [int(f) for f in input_row['freq']]
+            utils = [int(u) for u in input_row['util']]
+
+            idle_idxs = [min(int(i), 0) for i in input_row['idle']]
+            idles = [n.idle_state_by_idx(i)
+                     for n, i in zip(self.cpu_nodes, idle_idxs)]
+
+            nrg = self.estimate_from_cpu_util(
+                util_distrib=utils, freqs=freqs, idle_states=idles,
+                combine=combine)
+
+            # TODO this bit is slow. Dunno why, probably reallocating
+            # memory. Maybe we can speed this up using DataFrame.apply instead
+            # of DataFrameiterrows.
+            ret.loc[time] = {c: nrg[c] for c in columns}
+
         return ret
