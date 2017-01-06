@@ -576,6 +576,10 @@ class Executor():
             self._log.warning('FTrace events collection enabled')
             self.te.ftrace.start()
 
+        # Ensure cpu_frequency events are present if supported
+        if hasattr(self.target, 'cpufreq'):
+            self.target.cpufreq.trace_frequencies()
+
         # ENERGY: start sampling
         if self.te.emeter:
             self.te.emeter.reset()
