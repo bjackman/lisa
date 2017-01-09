@@ -616,19 +616,17 @@ class EnergyModel(object):
         # build a new Parser object for each expression we want to parse,
         # avoiding the aggregation call.
         parser = Parser(trace.ftrace)
-        freq = parser.solve('cpu_frequency:frequency')
-        parser = Parser(trace.ftrace)
         idle = parser.solve('cpu_idle:state')
         parser = Parser(trace.ftrace)
         util = parser.solve('sched_load_avg_cpu:util_avg')
 
-        assert all(df.columns.tolist() == self.cpus for df in [freq, idle, util])
+        assert all(df.columns.tolist() == self.cpus for df in [idle, util])
 
         columns = [tuple(n.cpus) for n in self.root.iter_nodes()
                    if n.active_states and n.idle_states]
 
-        _inputs = pd.concat([freq, idle, util], axis=1,
-                           keys=['freq', 'idle', 'util'])
+        _inputs = pd.concat([idle, util], axis=1,
+                           keys=['idle', 'util'])
         inputs = _inputs.fillna(method='ffill').dropna().drop_duplicates()
 
         ret = pd.DataFrame(columns=columns)
@@ -638,7 +636,6 @@ class EnergyModel(object):
         me_time = 0
 
         for time, input_row in inputs.iterrows():
-            freqs = [int(f) for f in input_row['freq']]
             utils = [int(u) for u in input_row['util']]
 
             idle_idxs = [min(int(i), 0) for i in input_row['idle']]
@@ -646,7 +643,7 @@ class EnergyModel(object):
                      for n, i in zip(self.cpu_nodes, idle_idxs)]
 
             nrg = self.estimate_from_cpu_util(
-                util_distrib=utils, freqs=freqs, idle_states=idles,
+                util_distrib=utils, idle_states=idles,
                 combine=not bool(component))
 
             if component:
