@@ -599,9 +599,18 @@ class EnergyModel(object):
         TODO doc
         TODO test
         """
+        # The Trappy grammar parser retains an aggregation DataFrame of the data
+        # is has parsed, adding the new data each time you parse a new
+        # expression. For our use case this brings about an inscrutable Pandas
+        # error that can only be reproduced once for each invocation of
+        # Python. Instead of debugging something insane like that let's just
+        # build a new Parser object for each expression we want to parse,
+        # avoiding the aggregation call.
         parser = Parser(trace.ftrace)
         freq = parser.solve('cpu_frequency:frequency')
+        parser = Parser(trace.ftrace)
         idle = parser.solve('cpu_idle:state')
+        parser = Parser(trace.ftrace)
         util = parser.solve('sched_load_avg_cpu:util_avg')
 
         assert all(df.columns.tolist() == self.cpus for df in [freq, idle, util])
