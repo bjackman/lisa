@@ -652,7 +652,7 @@ class EnergyModel(object):
         for time, input_row in inputs.iterrows():
             utils = [int(u) for u in input_row['util']]
 
-            idle_idxs = [min(int(i), 0) for i in input_row['idle']]
+            idle_idxs = [max(int(i), 0) for i in input_row['idle']]
             idles = [n.idle_state_by_idx(i)
                      for n, i in zip(self.cpu_nodes, idle_idxs)]
 
