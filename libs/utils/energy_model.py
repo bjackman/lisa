@@ -666,7 +666,7 @@ class EnergyModel(object):
 
             # TODO this bit is slow. Dunno why, probably reallocating
             # memory. Maybe we can speed this up using DataFrame.apply instead
-            # of DataFrameiterrows.
+            # of DataFrame.iterrows.
             ret.loc[time] = {c: nrg[c] for c in columns}
 
         return ret
