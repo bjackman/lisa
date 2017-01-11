@@ -55,7 +55,7 @@ class EasTest(LisaTest):
                 "sched_migrate_task",
                 "sched_switch",
                 "cpu_frequency",
-                "sched_group_energy",
+                "sg_energy",
                 "cpu_idle",
             ],
         },
