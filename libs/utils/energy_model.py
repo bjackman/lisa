@@ -326,18 +326,23 @@ class EnergyModel(object):
         states = self.cpu_nodes[0].active_states
         return any(c.active_states != states for c in self.cpu_nodes[1:])
 
-    def _guess_idle_states(self, cpus_active):
+    def _deepest_idle_idxs(self, cpus_active):
         def find_deepest(pd):
-            if not any(cpus_active[c] for c in pd.cpus):
-                if pd.parent:
-                    parent_state = find_deepest(pd.parent)
-                    if parent_state:
-                        return parent_state
-                return pd.idle_states[-1] if len(pd.idle_states) else None
-            return None
-
+            if any(cpus_active[c] for c in pd.cpus):
+                return -1
+            if pd.parent:
+                parent_idx = find_deepest(pd.parent)
+            else:
+                parent_idx = -1
+            ret = parent_idx + len(pd.idle_states)
+            return ret
         return [find_deepest(pd) for pd in self.cpu_pds]
 
+    def _guess_idle_states(self, cpus_active):
+        idxs = self._deepest_idle_idxs(cpus_active)
+        return [n.idle_state_by_idx(max(i, 0)) for n, i in zip(self.cpu_nodes, idxs)]
+
+    # TODO Rename this?
     def guess_idle_states(self, cpus_active):
         """Pessimistically guess the idle states that each CPU may enter
 
