@@ -617,10 +617,25 @@ class EnergyModel(object):
         self._log.info('%14s - Done', 'EnergyModel')
         return ret
 
-    def mimic_sched_group_energy(self, trace, style='BRENDAN', component=None):
+    def mimic_sched_group_energy(self, trace, style='BRENDAN', component=None,
+                                 sample_index=None):
         """
         TODO doc
         TODO test
+
+        :param sample_index: Series of sample times. If None, sample
+            pseudo-continuously i.e. at every relevant event in ``trace``.
+            Examples 1 and 2 below are functionally equivalent, but Example 1 is
+            faster if ``_e`` has siginficantly fewer rows than ``e`` .
+
+            ::
+
+              # Example 1:
+              e = m.mimic_sched_group_energy(trace, sample_index=foo)
+
+              # Example 2:
+              _e = m.mimic_sched_group_energy(trace)
+              e = _e.reindex(foo, method='ffill')
         """
         # The Trappy grammar parser retains an aggregation DataFrame of the data
         # is has parsed, adding the new data each time you parse a new
@@ -639,9 +654,11 @@ class EnergyModel(object):
         columns = [tuple(n.cpus) for n in self.root.iter_nodes()
                    if n.active_states and n.idle_states]
 
-        _inputs = pd.concat([idle, util], axis=1,
-                           keys=['idle', 'util'])
-        inputs = _inputs.ffill().dropna().drop_duplicates()
+        inputs = pd.concat([idle, util], axis=1,
+                           keys=['idle', 'util']).ffill()
+        if sample_index is not None:
+            inputs = inputs.reindex(sample_index, method='ffill')
+        inputs = inputs.dropna().drop_duplicates()
 
         ret = pd.DataFrame(columns=columns)
 
