@@ -622,7 +622,7 @@ class EnergyModel(object):
         self._log.info('%14s - Done', 'EnergyModel')
         return ret
 
-    def mimic_sched_group_energy(self, trace, style='BRENDAN', component=None,
+    def mimic_sched_group_energy(self, trace, flags=[], component=None,
                                  sample_index=None):
         """
         TODO doc
@@ -641,6 +641,14 @@ class EnergyModel(object):
               # Example 2:
               _e = m.mimic_sched_group_energy(trace)
               e = _e.reindex(foo, method='ffill')
+
+        :param flags: Options to alter behaviour of energy model.
+            Possible values:
+
+              ``use_power_domains``
+                Rectify the idle state traces to reflect hardware power domains
+
+
         """
         # The Trappy grammar parser retains an aggregation DataFrame of the data
         # is has parsed, adding the new data each time you parse a new
@@ -674,8 +682,13 @@ class EnergyModel(object):
         for time, input_row in inputs.iterrows():
             utils = [int(u) for u in input_row['util']]
 
-            idle_idxs = [max(int(i), 0) for i in input_row['idle']]
-            idles = [n.idle_state_by_idx(i)
+            idle_idxs = [int(i) for i in input_row['idle']]
+            if 'use_power_domains' in flags:
+                cpus_active = [i != -1 for i in idle_idxs]
+                deepest_possible = self._deepest_idle_idxs(cpus_active)
+                idle_idxs = [min(i, j) for i, j
+                             in zip(deepest_possible, idle_idxs)]
+            idles = [n.idle_state_by_idx(max(i, 0))
                      for n, i in zip(self.cpu_nodes, idle_idxs)]
 
             nrg = self.estimate_from_cpu_util(
