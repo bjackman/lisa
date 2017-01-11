@@ -641,7 +641,7 @@ class EnergyModel(object):
 
         _inputs = pd.concat([idle, util], axis=1,
                            keys=['idle', 'util'])
-        inputs = _inputs.fillna(method='ffill').dropna().drop_duplicates()
+        inputs = _inputs.ffill().dropna().drop_duplicates()
 
         ret = pd.DataFrame(columns=columns)
 
