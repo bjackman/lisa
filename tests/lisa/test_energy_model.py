@@ -31,6 +31,7 @@ big.LITTLE system and smoke-tests the methods and properties.
 
 little_cluster_active_states = OrderedDict([
     (1000, ActiveState(power=10)),
+    (1500, ActiveState(power=15)),
     (2000, ActiveState(power=20)),
 ])
 
@@ -113,10 +114,6 @@ em = EnergyModel(
     freq_domains=[littles, bigs]
 )
 
-def set_of_tuples(lists):
-    """
-    Helper to turn a list of lists into a set of tuples i.e. [[]] -> {()}
-    """
 
 class TestOptimalPlacement(TestCase):
     def assertPlacementListEqual(self, l1, l2):
