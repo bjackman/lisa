@@ -152,6 +152,53 @@ class EnergyModelNode(_CpuTree):
 
         raise KeyError('No idle state with index {}'.format(idx))
 
+    def flatten_energy(self, add_active_power={}, add_idle_power={}):
+        """
+        TODO doc
+        """
+        power_divisor = float(len(self.children) or 1)
+
+        # Trickle the power down. Create a new version of ourself but without
+        # any energy data. Our energy data is divided up evenly and added to our
+        # new children's energy data. This happens recursively, resulting in a
+        # flattened energy model.
+
+        # child_add_{active|idle} will be the add_{active|idle}_power arguments
+        # for each child.
+        # We use the weird __class__ thing to construct child_add_{active|idle}
+        # because if we currently have OrderedDicts we want to keep that
+        # orderedness, but if we don't then we mustn't introduce a false sense
+        # of order.
+
+        if self.active_states:
+            child_add_active = self.active_states.__class__()
+            for freq, state in self.active_states.iteritems():
+                add_state = add_active_power.get(freq, ActiveState(power=0))
+                power = (state.power + add_state.power) / power_divisor
+                child_add_active[freq] = ActiveState(state.capacity, power)
+        else:
+            child_add_active = add_active_power
+
+        if self.idle_states:
+            child_add_idle = self.idle_states.__class__()
+            for state_name, state_power in self.idle_states.iteritems():
+                add_power = add_idle_power.get(state_name, 0)
+                power = (state_power + add_power) / power_divisor
+                child_add_idle[state_name] = power
+        else:
+            child_add_idle = add_idle_power
+
+        if not self.children:
+            [cpu] = self.cpus
+            return self.__class__(child_add_active, child_add_idle,
+                                  cpu=cpu, name=self.name)
+
+        new_children = []
+        for child in self.children:
+            new_children.append(child.flatten_energy(child_add_active, child_add_idle))
+
+        return self.__class__(None, None, children=new_children, name=self.name)
+
 class EnergyModelRoot(EnergyModelNode):
     """
     Convenience class for root of an EnergyModelNode tree.
@@ -281,6 +328,7 @@ class EnergyModel(object):
             return ret
 
         self.root = root_node
+        self.root_pd = root_power_domain
         self.cpu_nodes = sorted_leaves(root_node)
         self.cpu_pds = sorted_leaves(root_power_domain)
         assert len(self.cpu_pds) == len(self.cpu_nodes)
@@ -705,3 +753,7 @@ class EnergyModel(object):
             ret.loc[time] = {c: nrg[c] for c in columns}
 
         return ret
+
+    def flatten_energy(self):
+        return self.__class__(
+            self.root.flatten_energy(), self.root_pd, self.freq_domains)
