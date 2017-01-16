@@ -666,10 +666,10 @@ class EnergyModel(object):
         TODO doc
         TODO test
 
-        :param sample_index: Series of sample times. If None, sample
+        :param sample_index: Sorted series of sample times. If None, sample
             pseudo-continuously i.e. at every relevant event in ``trace``.
             Examples 1 and 2 below are functionally equivalent, but Example 1 is
-            faster if ``_e`` has siginficantly fewer rows than ``e`` .
+            faster if ``e`` has siginficantly fewer rows than ``_e`` .
 
             ::
 
@@ -680,13 +680,13 @@ class EnergyModel(object):
               _e = m.mimic_sched_group_energy(trace)
               e = _e.reindex(foo, method='ffill')
 
+        :type sample_index: list, pandas.Series, pandas.Float64Index, or other.
+
         :param flags: Options to alter behaviour of energy model.
             Possible values:
 
               ``use_power_domains``
                 Rectify the idle state traces to reflect hardware power domains
-
-
         """
         # The Trappy grammar parser retains an aggregation DataFrame of the data
         # is has parsed, adding the new data each time you parse a new
