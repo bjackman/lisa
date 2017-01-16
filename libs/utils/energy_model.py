@@ -140,16 +140,6 @@ class EnergyModelNode(_CpuTree):
         if self.idle_states and idx < len(self.idle_states):
             return self.idle_states.keys()[idx]
 
-        ret = None
-        if self.parent:
-            try:
-                ret = self.parent.idle_state_by_idx(idx)
-            except KeyError:
-                pass
-
-        if ret is not None:
-            return ret
-
         raise KeyError('No idle state with index {}'.format(idx))
 
     def flatten_energy(self, add_active_power={}, add_idle_power={}):
