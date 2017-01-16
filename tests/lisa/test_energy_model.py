@@ -115,7 +115,7 @@ em = EnergyModel(
 )
 
 class TestFlatten(TestCase):
-    def test_flatten(self):
+    def test_flatten_energy(self):
         flattened = em.flatten_energy()
         for node in flattened.root.iter_nodes():
             if node.children:
@@ -152,6 +152,16 @@ class TestFlatten(TestCase):
         ]))
         self.assertDictEqual(flattened.cpu_nodes[2].active_states,
                              flattened.cpu_nodes[3].active_states)
+
+    def test_flatten_power_domains(self):
+        flattened = em.flatten_power_domains()
+        self.assertListEqual(flattened.root_pd.idle_states, [])
+        self.assertEqual(len(flattened.root_pd.children), 4)
+        for pd in flattened.root_pd.children:
+            self.assertListEqual(pd.children, [])
+            self.assertListEqual(pd.idle_states,
+                                 ['WFI', 'cpu-sleep-0', 'cluster-sleep-0'])
+
 
 class TestOptimalPlacement(TestCase):
     def assertPlacementListEqual(self, l1, l2):

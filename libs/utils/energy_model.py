@@ -747,3 +747,12 @@ class EnergyModel(object):
     def flatten_energy(self):
         return self.__class__(
             self.root.flatten_energy(), self.root_pd, self.freq_domains)
+
+    def flatten_power_domains(self):
+        cpu_domains = []
+        for cpu, node in enumerate(self.cpu_nodes):
+            idle_states = list(node.idle_states)
+            cpu_domains.append(PowerDomain(cpu=cpu, idle_states=idle_states))
+            new_root_pd = PowerDomain(children=cpu_domains, idle_states=[])
+
+        return self.__class__(self.root, new_root_pd, self.freq_domains)
