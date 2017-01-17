@@ -71,11 +71,11 @@ class ForkMigration(EasTest):
                             "kind" : "Periodic",
                             "params" : {
                                 "duty_cycle_pct": 10,
-                                "duration_s": WORKLOAD_DURATION_S,
+                                "duration_s": 1,
                                 "period_ms": WORKLOAD_PERIOD_MS,
                             },
                             "prefix" : "small",
-                            "tasks" : "big",
+                            "tasks" : 1,
                         },
                     },
                 },
