@@ -33,6 +33,8 @@ from . import (EasTest, energy_aware_conf,
                SWITCH_WINDOW_HALF,
                SMALL_DCYCLE,
                BIG_DCYCLE,
+               STEP_HIGH_DCYCLE,
+               STEP_LOW_DCYCLE,
                EXPECTED_RESIDENCY_PCT,
                OFFLOAD_EXPECTED_BUSY_TIME_PCT,
                OFFLOAD_MIGRATION_MIGRATOR_DELAY)
