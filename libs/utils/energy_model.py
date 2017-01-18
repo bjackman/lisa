@@ -65,17 +65,24 @@ class _CpuTree(object):
 
         self.name = None
 
-    def __repr__(self):
-        name_bit = ''
+    def _get_repr_bits(self):
+        """
+        Return list of data items to be represented in __repr__
+        """
+        bits = []
         if self.name:
-            name_bit = 'name="{}", '.format(self.name)
+            bits += ['name="{}"'.format(self.name)]
 
         if self.children:
-            return '{}({}children={})'.format(
-                self.__class__.__name__, name_bit, self.children)
+            bits += ["children={}".format(self.children)]
         else:
-            return '{}({}cpus={})'.format(
-                self.__class__.__name__, name_bit, self.cpus)
+            bits += ["cpus={}".format(self.cpus)]
+
+        return bits
+
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__,
+                               ', '.join(self._get_repr_bits()))
 
     def _iter(self, include_non_leaves):
         for child in self.children:
@@ -228,6 +235,10 @@ class PowerDomain(_CpuTree):
     def __init__(self, idle_states, cpu=None, children=None):
         super(PowerDomain, self).__init__(cpu, children)
         self.idle_states = idle_states
+
+    def _get_repr_bits(self):
+        bits = super(PowerDomain, self)._get_repr_bits()
+        return bits + ['idle_states={}'.format(self.idle_states)]
 
 class EnergyModel(object):
     """Represents hierarchical CPU topology with power and capacity data
