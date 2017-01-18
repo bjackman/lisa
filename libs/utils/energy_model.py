@@ -73,16 +73,43 @@ class _CpuTree(object):
         if self.name:
             bits += ['name="{}"'.format(self.name)]
 
+        return bits
+
+    def __repr__(self):
+        bits = self._get_repr_bits()
+
         if self.children:
             bits += ["children={}".format(self.children)]
         else:
             bits += ["cpus={}".format(self.cpus)]
 
-        return bits
-
-    def __repr__(self):
         return '{}({})'.format(self.__class__.__name__,
-                               ', '.join(self._get_repr_bits()))
+                               ', '.join(bits))
+
+    def _repr_pretty_(self, p, cycle):
+        cls_name = self.__class__.__name__
+
+        if cycle:
+            # This shouldn't happen
+            raise ValueError('Graph cycle in {} tree'.format(cls_name))
+
+        with p.group(4, '{}('.format(cls_name), ')'):
+            for bit in self._get_repr_bits():
+                p.pretty(bit)
+                p.text(',')
+                p.breakable()
+
+            if self.children:
+                with p.group(4, 'children=[', ']'):
+                    p.breakable()
+                    for i, child in enumerate(self.children):
+                        if i:
+                            p.text(',')
+                            p.breakable()
+                        p.pretty(child)
+            else:
+                p.text("cpus={}".format(self.cpus))
+
 
     def _iter(self, include_non_leaves):
         for child in self.children:
@@ -132,6 +159,10 @@ class EnergyModelNode(_CpuTree):
         self.name = name
         self.active_states = active_states
         self.idle_states = idle_states
+
+    def _get_repr_bits(self):
+        bits = super(EnergyModelNode, self)._get_repr_bits()
+        return bits + [self.active_states]
 
     @property
     def max_capacity(self):
