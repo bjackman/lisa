@@ -28,6 +28,7 @@ from android import System, Workload
 from env import TestEnv
 
 from devlib.utils.misc import memoized
+from devlib.utils.android import fastboot_command
 
 class LisaBenchmark(object):
     """
@@ -153,7 +154,7 @@ class LisaBenchmark(object):
 
         return self.bm_conf
 
-    def _getBmName(self):
+    def _getWorkload(self):
         if self.bm_name is None:
             msg = 'Benchmark subclasses must override the `bm_name` attribute'
             raise NotImplementedError(msg)
@@ -193,7 +194,7 @@ class LisaBenchmark(object):
         self.target = self.te.target
 
         self._log.info('=== Initialization...')
-        self.wl = self._getBmName()
+        self.wl = self._getWorkload()
         self.out_dir=self.te.res_dir
         try:
             self.benchmarkInit()
@@ -236,6 +237,7 @@ class LisaBenchmark(object):
             if lines > 1e6:
                 self._log.warning('device logcat seems quite busy, '
                                   'continuing anyway... ')
+                break
 
     def reboot_target(self, disable_charge=True):
         """
@@ -253,13 +255,13 @@ class LisaBenchmark(object):
             self._log.warning('Rebooting image to use: %s', self.args.boot_image)
 
             self._log.debug('Waiting 6[s] to enter bootloader...')
-            self.target.adb_reboot_bootloader('reboot-bootloader')
+            self.target.adb_reboot_bootloader()
             sleep(6)
             # self._fastboot('boot {}'.format(self.args.boot_image))
             cmd = 'boot {}'.format(self.args.boot_image)
-            self.target.fastboot_command(cmd, device=self.target.adb_name)
+            fastboot_command(cmd, device=self.target.adb_name)
             self._log.debug('Waiting {}[s] for boot to start...'\
-                            .format(self.boot_timeout))
+                            .format(self.args.boot_timeout))
             sleep(self.boot_timeout)
 
         else:
