@@ -33,8 +33,8 @@ from . import (EasTest, energy_aware_conf,
                SWITCH_WINDOW_HALF,
                SMALL_DCYCLE,
                BIG_DCYCLE,
-               STEP_HIGH_DCYCLE,
                STEP_LOW_DCYCLE,
+               STEP_HIGH_DCYCLE,
                EXPECTED_RESIDENCY_PCT,
                OFFLOAD_EXPECTED_BUSY_TIME_PCT,
                OFFLOAD_MIGRATION_MIGRATOR_DELAY)
@@ -401,11 +401,11 @@ class WakeMigration(EasTest):
 
     def _assert_switch(self, experiment, expected_switch_to, phases):
         if expected_switch_to == "big":
-            switch_from = self.target.bl.littles
-            switch_to   = self.target.bl.bigs
+            switch_from = self.te.nrg_model.littlest_cpus
+            switch_to   = self.te.nrg_model.biggest_cpus
         elif expected_switch_to == "little":
-            switch_from = self.target.bl.bigs
-            switch_to   = self.target.bl.littles
+            switch_from = self.te.nrg_model.biggest_cpus
+            switch_to   = self.te.nrg_model.littlest_cpus
         else:
             raise ValueError("Invalid expected_switch_to")
 

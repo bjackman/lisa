@@ -53,12 +53,12 @@ class _CpuTree(object):
         self.parent = None
 
         if cpu is not None:
-            self.cpus = [cpu]
+            self.cpus = (cpu,)
             self.children = []
         else:
             if len(children) == 0:
                 raise ValueError('children cannot be empty')
-            self.cpus = sorted(set().union(*[n.cpus for n in children]))
+            self.cpus = tuple(sorted(set().union(*[n.cpus for n in children])))
             self.children = children
             for child in children:
                 child.parent = self
@@ -119,9 +119,11 @@ class _CpuTree(object):
             yield self
 
     def iter_nodes(self):
+        """Iterate over nodes depth-first, post-order"""
         return self._iter(True)
 
     def iter_leaves(self):
+        """Iterate over leaves"""
         return self._iter(False)
 
 class EnergyModelNode(_CpuTree):
@@ -139,10 +141,8 @@ class EnergyModelNode(_CpuTree):
                           values. Compute capacity data is optional for
                           non-leaf nodes.
     :param idle_states: Dict mapping idle state names to power usage values
-                        If you want to use :meth:`idle_state_by_idx`, use an
-                        OrderedDict, sorted such that shallower idle states come
-                        first.
     :param cpu: The CPU this node represents. If provided, this is a leaf node.
+    :type cpus: tuple(int)
     :param children: Non-empty list of child :class:`EnergyModelNode` objects
     :param name: Optional human-readable name for this node. Leaf (CPU) nodes
                  have a default name of "cpuN" where N is the cpu number.
@@ -180,53 +180,6 @@ class EnergyModelNode(_CpuTree):
 
         raise KeyError('No idle state with index {}'.format(idx))
 
-    def flatten_energy(self, add_active_power={}, add_idle_power={}):
-        """
-        TODO doc
-        """
-        power_divisor = float(len(self.children) or 1)
-
-        # Trickle the power down. Create a new version of ourself but without
-        # any energy data. Our energy data is divided up evenly and added to our
-        # new children's energy data. This happens recursively, resulting in a
-        # flattened energy model.
-
-        # child_add_{active|idle} will be the add_{active|idle}_power arguments
-        # for each child.
-        # We use the weird __class__ thing to construct child_add_{active|idle}
-        # because if we currently have OrderedDicts we want to keep that
-        # orderedness, but if we don't then we mustn't introduce a false sense
-        # of order.
-
-        if self.active_states:
-            child_add_active = self.active_states.__class__()
-            for freq, state in self.active_states.iteritems():
-                add_state = add_active_power.get(freq, ActiveState(power=0))
-                power = (state.power + add_state.power) / power_divisor
-                child_add_active[freq] = ActiveState(state.capacity, power)
-        else:
-            child_add_active = add_active_power
-
-        if self.idle_states:
-            child_add_idle = self.idle_states.__class__()
-            for state_name, state_power in self.idle_states.iteritems():
-                add_power = add_idle_power.get(state_name, 0)
-                power = (state_power + add_power) / power_divisor
-                child_add_idle[state_name] = power
-        else:
-            child_add_idle = add_idle_power
-
-        if not self.children:
-            [cpu] = self.cpus
-            return self.__class__(child_add_active, child_add_idle,
-                                  cpu=cpu, name=self.name)
-
-        new_children = []
-        for child in self.children:
-            new_children.append(child.flatten_energy(child_add_active, child_add_idle))
-
-        return self.__class__(None, None, children=new_children, name=self.name)
-
 class EnergyModelRoot(EnergyModelNode):
     """
     Convenience class for root of an EnergyModelNode tree.
@@ -262,6 +215,7 @@ class PowerDomain(_CpuTree):
     :param children: Non-empty list of child :class:`PowerDomain` objects
 
     :ivar cpus: CPUs contained in this node. Includes those of child nodes.
+    :type cpus: tuple(int)
     """
     def __init__(self, idle_states, cpu=None, children=None):
         super(PowerDomain, self).__init__(cpu, children)
@@ -339,7 +293,7 @@ class EnergyModel(object):
 
     def __init__(self, root_node, root_power_domain, freq_domains):
         self.cpus = root_node.cpus
-        if self.cpus != range(len(self.cpus)):
+        if self.cpus != tuple(range(len(self.cpus))):
             raise ValueError('CPU IDs [{}] are sparse'.format(self.cpus))
 
         fd_intersection = set().intersection(*freq_domains)
@@ -558,9 +512,6 @@ class EnergyModel(object):
                 ret[cpus]["active"] = active_power
                 ret[cpus]["idle"] = idle_power
 
-            power += active_power + idle_power
-
-        ret["power"] = power
         return ret
 
     def estimate_from_cpu_util(self, util_distrib, freqs=None, idle_states=None,
@@ -593,8 +544,7 @@ class EnergyModel(object):
 
         :returns: Dict with power in bogo-Watts (bW), with contributions from
                   each system component keyed with a tuple of the CPUs
-                  comprising that component, and the sum of those components
-                  keyed with 'power'. e.g:
+                  comprising that component (i.e. :attr:EnergyModelNode.cpus)
 
                   ::
 
@@ -602,26 +552,24 @@ class EnergyModel(object):
                         (0,)    : 10,
                         (1,)    : 10,
                         (1, 2)  : 5,
-                        'power' : 25
                     }
 
                   This represents CPUs 0 and 1 each using 10bW and their shared
                   resources using 5bW for a total of 25bW.
         """
+        if len(util_distrib) != len(self.cpus):
+            raise ValueError(
+                'util_distrib length ({}) must equal CPU count ({})'.format(
+                    len(util_distrib), len(self.cpus)))
+
         if freqs is None:
             freqs = self.guess_freqs(util_distrib)
         if idle_states is None:
             idle_states = self.guess_idle_states(util_distrib)
 
-            # The active time of a node is estimated as the max of the active
-            # times of its children.
-            # This works great for the synthetic periodic workloads we use in
-            # LISA (where all threads wake up at the same time) but is probably
-            # no good for real workloads.
-
         cpu_active_time = []
         for cpu, node in enumerate(self.cpu_nodes):
-            assert [cpu] == node.cpus
+            assert (cpu,) == node.cpus
             cap = node.active_states[freqs[cpu]].capacity
             cpu_active_time.append(min(float(util_distrib[cpu]) / cap, 1.0))
 
@@ -687,7 +635,7 @@ class EnergyModel(object):
                 freqs, overutilized = self._guess_freqs(util)
                 if not overutilized:
                     power = self.estimate_from_cpu_util(util, freqs=freqs)
-                    candidates[util] = power
+                    candidates[util] = sum(power.values())
 
         if not candidates:
             # The system can't provide full throughput to this workload.
@@ -696,8 +644,8 @@ class EnergyModel(object):
                     sum(capacities.values())))
 
         # Whittle down to those that give the lowest energy estimate
-        min_power = min(e['power'] for e in candidates.itervalues())
-        ret = [u for u, e in candidates.iteritems() if e['power'] == min_power]
+        min_power = min(p for p in candidates.itervalues())
+        ret = [u for u, p in candidates.iteritems() if p == min_power]
 
         self._log.info('%14s - Done', 'EnergyModel')
         return ret

@@ -225,7 +225,6 @@ class TestEnergyEst(TestCase):
 
         power = em.estimate_from_cpu_util([10000] * 4)
         exp = {
-            'power' : total,
             (0): { 'active': little_cpu, 'idle': 0},
             (1): { 'active': little_cpu, 'idle': 0},
             (2): { 'active': big_cpu, 'idle': 0},
@@ -237,19 +236,20 @@ class TestEnergyEst(TestCase):
             self.assertAlmostEqual(v, power[k])
 
     def test_all_idle(self):
-        self.assertEqual(em.estimate_from_cpu_util([0, 0, 0, 0])['power'],
+        self.assertEqual(sum(em.estimate_from_cpu_util([0, 0, 0, 0]).values()),
                          0 * 4 # CPU power = 0
                          + 2   # big cluster power
                          + 1)  # LITTLE cluster power
 
     def test_one_little_half_lowest(self):
         cpu0_util = 100 * 0.5
-        self.assertEqual(em.estimate_from_cpu_util([cpu0_util, 0, 0, 0])['power'],
-                         (0.5 * 100)  # CPU0 active power
-                         + (0.5 * 5)  # CPU0 idle power
-                         + (0.5 * 5)  # LITTLE cluster idle power
-                         + (0.5 * 10) # LITTLE cluster active power
-                         + 2)         # big cluster power
+        self.assertEqual(
+            sum(em.estimate_from_cpu_util([cpu0_util, 0, 0, 0]).values()),
+                (0.5 * 100)  # CPU0 active power
+                + (0.5 * 5)  # CPU0 idle power
+                + (0.5 * 5)  # LITTLE cluster idle power
+                + (0.5 * 10) # LITTLE cluster active power
+                + 2)         # big cluster power
 
 class TestIdleStates(TestCase):
     def test_zero_util_deepest(self):

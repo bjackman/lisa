@@ -15,20 +15,18 @@
 # limitations under the License.
 #
 
-from bisect import bisect
 from math import isnan
 
 import numpy as np
 import pandas as pd
 
-from bart.common.Utils import area_under_curve, select_window
+from bart.common.Utils import area_under_curve
+
 from energy_model import EnergyModelCapacityError
 from perf_analysis import PerfAnalysis
 from test import experiment_test
 from trace import Trace
-from . import (EasTest, energy_aware_conf,
-               WORKLOAD_DURATION_S,
-               WORKLOAD_PERIOD_MS)
+from . import EasTest, energy_aware_conf, WORKLOAD_PERIOD_MS
 
 class EnergyModelTest(EasTest):
     """
@@ -42,6 +40,12 @@ class EnergyModelTest(EasTest):
 
     negative_slack_allowed_pct = 5
     """Percentage of RT-App task activations with negative slack allowed"""
+
+    energy_est_threshold_pct = 20
+    """
+    Allowed margin for error in estimated energy cost for task placement,
+    compared to optimal placment.
+    """
 
     @classmethod
     def _getExperimentsConf(cls, *args, **kwargs):
@@ -90,7 +94,7 @@ class EnergyModelTest(EasTest):
 
         Use the sched_switch trace event to find which CPU each task ran
         on. Does not reflect idleness - tasks not running are shown as running
-        on the last CPU they woke ran on.
+        on the last CPU they woke on.
 
         :param experiment: The :class:Experiment to examine
         :returns: A Pandas DataFrame with a column for each task, showing the
@@ -107,6 +111,16 @@ class EnergyModelTest(EasTest):
         cpu_df = cpu_df[(cpu_df.shift(+1) != cpu_df).any(axis=1)]
         return cpu_df
 
+    def _sort_power_df_columns(self, df):
+        """
+        Helper method to re-order the columns of a power DataFrame
+
+        This has no significance for code, but when examining DataFrames by hand
+        they are easier to understand if the columns are in a logical order.
+        """
+        node_cpus = [node.cpus for node in self.te.nrg_model.root.iter_nodes()]
+        return pd.DataFrame(df, columns=[c for c in node_cpus if c in df])
+
     def get_power_df(self, experiment):
         """
         Considering only the task placement, estimate power usage over time
@@ -116,10 +130,9 @@ class EnergyModelTest(EasTest):
         perfect cpuidle and cpufreq behaviour.
 
         :param experiment: The :class:Experiment to examine
-        :returns: A Pandas DataFrame with a column each node in the energy model
-                  (keyed with a tuple of the CPUs contained by that node) and a
-                  "power" column with the sum of other columns. Shows the
-                  estimated power over time.
+        :returns: A Pandas DataFrame with a column node in the energy model
+                  (keyed with a tuple of the CPUs contained by that node) Shows
+                  the estimated power over time.
         """
         task_cpu_df = self.get_task_cpu_df(experiment)
         task_utils_df = self.get_task_utils_df(experiment)
@@ -149,7 +162,7 @@ class EnergyModelTest(EasTest):
             power = nrg_model.estimate_from_cpu_util(cpu_utils)
             columns = power.keys()
             return pd.Series([power[c] for c in columns], index=columns)
-        return df.apply(est_power, axis=1)
+        return self._sort_power_df_columns(df.apply(est_power, axis=1))
 
     def get_expected_power_df(self, experiment):
         """
@@ -175,7 +188,8 @@ class EnergyModelTest(EasTest):
             power = nrg_model.estimate_from_cpu_util(expected_utils[0])
             columns = power.keys()
             return pd.Series([power[c] for c in columns], index=columns)
-        return task_utils_df.apply(exp_power, axis=1)
+        return self._sort_power_df_columns(
+            task_utils_df.apply(exp_power, axis=1))
 
     def _test_slack(self, experiment, tasks):
         """
@@ -213,16 +227,17 @@ class EnergyModelTest(EasTest):
         exp_power = self.get_expected_power_df(experiment)
         est_power = self.get_power_df(experiment)
 
-        exp_energy = area_under_curve(exp_power['power'])
-        est_energy = area_under_curve(est_power['power'])
+        exp_energy = area_under_curve(exp_power.sum(axis=1), method='rect')
+        est_energy = area_under_curve(est_power.sum(axis=1), method='rect')
 
         msg = 'Estimated {} bogo-Joules to run workload, expected {}'.format(
             est_energy, exp_energy)
-        self.assertLess(est_energy, exp_energy * 1.2, msg=msg)
+        threshold = exp_energy * (1 + (self.energy_est_threshold_pct / 100.))
+        self.assertLess(est_energy, threshold, msg=msg)
 
 class OneSmallTask(EnergyModelTest):
     """
-    Test EAS for a single 20% task
+    Test EAS for a single 20% task over 2 seconds
     """
     workloads = {
         'one_small' : {
@@ -231,7 +246,7 @@ class OneSmallTask(EnergyModelTest):
                 'class' : 'periodic',
                 'params' : {
                     'duty_cycle_pct': 20,
-                    'duration_s': WORKLOAD_DURATION_S,
+                    'duration_s': 2,
                     'period_ms': 10,
                 },
                 'tasks' : 1,
@@ -248,7 +263,7 @@ class OneSmallTask(EnergyModelTest):
 
 class ThreeSmallTasks(EnergyModelTest):
     """
-    Test EAS for 3 20% tasks
+    Test EAS for 3 20% tasks over 2 seconds
     """
     workloads = {
         'three_small' : {
@@ -257,7 +272,7 @@ class ThreeSmallTasks(EnergyModelTest):
                 'class' : 'periodic',
                 'params' : {
                     'duty_cycle_pct': 20,
-                    'duration_s': WORKLOAD_DURATION_S,
+                    'duration_s': 2,
                     'period_ms': 10,
                 },
                 'tasks' : 3,
@@ -274,7 +289,7 @@ class ThreeSmallTasks(EnergyModelTest):
 
 class TwoBigTasks(EnergyModelTest):
     """
-    Test EAS for 2 80% tasks
+    Test EAS for 2 80% tasks over 2 seconds
     """
     workloads = {
         'two_big' : {
@@ -283,7 +298,7 @@ class TwoBigTasks(EnergyModelTest):
                 'class' : 'periodic',
                 'params' : {
                     'duty_cycle_pct': 80,
-                    'duration_s': WORKLOAD_DURATION_S,
+                    'duration_s': 2,
                     'period_ms': 10,
                 },
                 'tasks' : 2,
@@ -300,7 +315,7 @@ class TwoBigTasks(EnergyModelTest):
 
 class TwoBigThreeSmall(EnergyModelTest):
     """
-    Test EAS for 2 70% tasks and 3 10% tasks
+    Test EAS for 2 70% tasks and 3 10% tasks over 2 seconds
     """
     workloads = {
         'two_big_three_small' : {
@@ -312,7 +327,7 @@ class TwoBigThreeSmall(EnergyModelTest):
                         'kind' : 'Periodic',
                         'params' : {
                             'duty_cycle_pct': 70,
-                            'duration_s': WORKLOAD_DURATION_S,
+                            'duration_s': 2,
                             'period_ms': WORKLOAD_PERIOD_MS,
                         },
                         'tasks' : 2,
@@ -321,7 +336,7 @@ class TwoBigThreeSmall(EnergyModelTest):
                         'kind' : 'Periodic',
                         'params' : {
                             'duty_cycle_pct': 10,
-                            'duration_s': WORKLOAD_DURATION_S,
+                            'duration_s': 2,
                             'period_ms': WORKLOAD_PERIOD_MS,
                         },
                         'tasks' : 3,
@@ -354,7 +369,7 @@ class RampUp(EnergyModelTest):
                             "start_pct" :  5,
                             "end_pct"   : 70,
                             "delta_pct" :  5,
-                            "time_s"    :  0.5,
+                            "time_s"    :  2,
                          },
                     },
                 },
@@ -386,7 +401,7 @@ class RampDown(EnergyModelTest):
                             "start_pct" : 70,
                             "end_pct"   :  5,
                             "delta_pct" :  5,
-                            "time_s"    :  0.5,
+                            "time_s"    :  2,
                          },
                     },
                 },
