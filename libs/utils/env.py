@@ -390,7 +390,7 @@ class TestEnv(ShareState):
         # Initialize Pixel phone
         elif self.conf['board'].upper() == 'PIXEL':
             self.nrg_model = pixel_energy
-            self.__modules = ['bl', 'hwmon', 'cpufreq']
+            self.__modules = ['bl', 'cpufreq']
             platform = Platform(model='pixel')
 
         elif self.conf['board'] != 'UNKNOWN':
