@@ -57,6 +57,7 @@ class EasTest(LisaTest):
                 "cpu_frequency",
                 "sg_energy",
                 "cpu_idle",
+                "walt_update_task_ravg",
             ],
         },
         "modules": ["cgroups"],
