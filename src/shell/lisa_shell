@@ -268,6 +268,7 @@ function _lisa-test {
 TEST=${1}
 nosetests -v --nocapture --nologcapture \
           --logging-config=logging.conf \
+          --with-xunit --xunit-file=results_latest/results.xml \
           $TEST
 }
 
