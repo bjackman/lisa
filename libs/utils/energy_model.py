@@ -157,7 +157,7 @@ class EnergyModelNode(_CpuTree):
                  cpu=None, children=None, name=None):
         super(EnergyModelNode, self).__init__(cpu, children)
 
-        if cpu and not name:
+        if cpu is not None and not name:
             name = 'cpu' + str(cpu)
 
         self.name = name
