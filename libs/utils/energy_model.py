@@ -777,3 +777,42 @@ class EnergyModel(object):
             new_root_pd = PowerDomain(children=cpu_domains, idle_states=[])
 
         return self.__class__(self.root, new_root_pd, self.freq_domains)
+
+    def gaze_at_navel(self):
+        observations = []
+
+        for cpus in self.cpu_groups:
+            cpu_node = self.cpu_nodes[cpus[0]]
+            for freq1, freq2 in product(cpu_node.active_states, repeat=2):
+                if freq1 > freq2:
+                    state1 = cpu_node.active_states[freq1]
+                    state2 = cpu_node.active_states[freq2]
+
+                    if state1.capacity <= state2.capacity:
+                        observations.append(
+                            "CPUs {} capacity doesn't increase {}Hz -> {}Hz"\
+                              .format(cpus, freq2, freq1))
+
+                    if ((float(state1.capacity) / state1.power) >=
+                        (float(state2.capacity) / state2.power)):
+                        observations.append(
+                            'CPUs {} compute-per-watt no better at '
+                            '{}Hz than {}Hz'.format(cpus, freq2, freq1))
+
+        for node in self.root.iter_nodes():
+            if not (node.active_states and node.idle_states):
+                continue
+
+            for freq, idle_state in product(node.active_states,
+                                            node.idle_states):
+                print "Checking {} vs {}".format(freq, idle_state)
+                active_power = node.active_states[freq].power
+                idle_power = node.idle_states[idle_state]
+
+                if idle_power >= active_power:
+                    observations.append(
+                        'Node {} uses more power idle in {} than active at {}Hz'\
+                        .format(node.cpus, idle_state, freq))
+
+        return observations
+
