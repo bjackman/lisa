@@ -468,7 +468,7 @@ class EnergyModel(object):
         return freqs
 
     def _estimate_from_active_time(self, cpu_active_time, freqs, idle_states,
-                                   util_aggregator, combine):
+                                   util_aggregator, combine, zero_idle):
         """Helper for estimate_from_cpu_util
 
         Like estimate_from_cpu_util but uses active time i.e. proportion of time
@@ -499,11 +499,14 @@ class EnergyModel(object):
                     cpus, active_time, node.active_states[freq].power,
                     active_power))
 
-            _idle_power = max(node.idle_states[idle_states[c]] for c in cpus)
-            idle_power = _idle_power * (1 - active_time)
-            self._log.debug(
-                "Node {}: idle time {} * power {} = idle_power {}".format(
-                    cpus, 1 - active_time, _idle_power, idle_power))
+            if zero_idle:
+                idle_power = 0
+            else:
+                _idle_power = max(node.idle_states[idle_states[c]] for c in cpus)
+                idle_power = _idle_power * (1 - active_time)
+                self._log.debug(
+                    "Node {}: idle time {} * power {} = idle_power {}".format(
+                        cpus, 1 - active_time, _idle_power, idle_power))
 
             if combine:
                 ret[cpus] = active_power + idle_power
@@ -515,7 +518,8 @@ class EnergyModel(object):
         return ret
 
     def estimate_from_cpu_util(self, util_distrib, freqs=None, idle_states=None,
-                               util_aggregator=max, combine=True):
+                               util_aggregator=max, combine=True,
+                               zero_idle=False):
         """
         Estimate the energy usage of the system under a utilization distribution
 
@@ -541,6 +545,11 @@ class EnergyModel(object):
             :func:`max` (the optimistic case - assuming the maximum degree of
             overlap between task activations on different CPUs) and :func:`sum`
             (the pessimistic case). Aggregated utilization is capped at 100%.
+
+        :param zero_idle: The model separately estimates, then combines, power
+            for CPU active time and CPU idle time. The idle power estimation is
+            rather inaccurate, so set zero_idle=True to consider only the CPU
+            active power.
 
         :returns: Dict with power in bogo-Watts (bW), with contributions from
                   each system component keyed with a tuple of the CPUs
@@ -578,7 +587,8 @@ class EnergyModel(object):
         return self._estimate_from_active_time(cpu_active_time,
                                                freqs, idle_states,
                                                util_aggregator,
-                                               combine=combine)
+                                               combine=combine,
+                                               zero_idle=zero_idle)
 
     def get_optimal_placements(self, capacities):
         """Find the optimal distribution of work for a set of tasks
