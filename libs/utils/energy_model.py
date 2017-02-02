@@ -654,37 +654,9 @@ class EnergyModel(object):
         tasks = capacities.keys()
 
         num_candidates = len(self.cpus) ** len(tasks)
-        print(
-            '%14s - Searching %d configurations for optimal task placement...' %
-            ('EnergyModel', num_candidates))
-
-
-        def get_partitions(l, count):
-            item = l[0]
-            ret = []
-            for subl_partition in get_partitions(l[1:]):
-
-
-        # Map tasks into CPU groups
-        for task_group_idxs in product(range(len(self.cpu_groups)), repeat=len(tasks)):
-            # task_group_idxs[i] is the index of the group that task i is in
-            # group_tasks[j] will be the tasks in group j
-            group_tasks = [[] for _ in self.cpu_groups]
-            for task_idx, group_idx in enumerate(task_group_idxs):
-                group_tasks[group_idx].append(tasks[task_idx])
-
-            # Now we know which group each task will go into. Now find all the
-            # ways to assign tasks to CPUs within each group.. but
-            for group, tasks in enumerate(group_tasks):
-                group_util_distribs = set()
-
-
-        print "DONE"
-        return
-
-        for groups in product(self.cpu_groups, repeat=len(tasks)):
-            placement = {task: group for task, group in zip(tasks, groups)}
-
+        self._log.info(
+            '%14s - Searching %d configurations for optimal task placement...',
+            'EnergyModel', num_candidates)
 
         candidates = {}
         for cpus in product(self.cpus, repeat=len(tasks)):
