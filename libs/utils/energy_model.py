@@ -817,7 +817,6 @@ class EnergyModel(object):
 
             for freq, idle_state in product(node.active_states,
                                             node.idle_states):
-                print "Checking {} vs {}".format(freq, idle_state)
                 active_power = node.active_states[freq].power
                 idle_power = node.idle_states[idle_state]
 
