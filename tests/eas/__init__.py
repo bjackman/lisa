@@ -38,6 +38,9 @@ energy_aware_conf = {
     'tag' : 'energy_aware',
     'flags' : ['ftrace', 'freeze_userspace'],
     'sched_features' : 'ENERGY_AWARE',
+    "cpufreq" : {
+        "governor" : "sched",
+    },
 }
 
 class EasTest(LisaTest):
@@ -62,9 +65,6 @@ class EasTest(LisaTest):
             ],
         },
         "modules": ["cgroups"],
-        "cpufreq" : {
-            "governor" : "sched",
-        },
     }
 
     # Set to true to run a test only on heterogeneous systems
