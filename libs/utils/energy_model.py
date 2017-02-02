@@ -173,6 +173,11 @@ class EnergyModelNode(_CpuTree):
         """Compute capacity at highest frequency"""
         return max(s.capacity for s in self.active_states.values())
 
+    @property
+    def min_capacity(self):
+        """Compute capacity at lowest frequency"""
+        return min(s.capacity for s in self.active_states.values())
+
     def idle_state_by_idx(self, idx):
         """ TODO doc and test"""
         if not isinstance(self.idle_states, OrderedDict):
