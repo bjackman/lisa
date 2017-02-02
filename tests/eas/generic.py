@@ -447,3 +447,93 @@ class EnergyModelWakeMigration(EnergyModelTest):
     @experiment_test
     def test_task_placement(self, experiment, tasks):
         self._test_task_placement(experiment, tasks)
+
+class ClusterPacking(EnergyModelTest):
+    """
+    Test that tasks are packed onto clusters
+
+    Find a workload of multiple small tasks that can be spread onto multiple
+    CPUs to avoid raising the CPU frequencies. If subsets of CPUs share
+    energy-consuming resources (i.e. the system has "clusters"), test that the
+    tasks are packed into one of these subsets.
+    """
+
+    task_size = 30
+    """The capacity of the small tasks we'll use to test packing"""
+
+    def get_expected_power_df(self, experiment):
+        """
+        :param experiment: The :class:Experiment to examine
+        :returns: A Pandas DataFrame with a column each node in the energy model
+                  (keyed with a tuple of the CPUs contained by that node) and a
+                  "power" column with the sum of other columns. Shows the
+                  estimated *optimal* power over time.
+        """
+        nrg_model = self.te.nrg_model
+
+        util_distrib = [0 for i in nrg_model.cpu_nodes]
+        for cpu in self.cluster.cpus:
+            util_distrib[cpu] = self.task_size * self.tasks_per_cpu
+
+        return pd.DataFrame(nrg_model.estimate_from_cpu_util(util_distrib),
+                            index=[self.get_start_time(experiment)])
+
+    @classmethod
+    def _getExperimentsConf(cls, test_env):
+        nrg_model = test_env.nrg_model
+
+        # Find "LITTLE clusters"
+        little_clusters = []
+        for node in nrg_model.root.iter_nodes():
+            # Only consider nodes that are exactly one level from the leaves,
+            # i.e. nodes that have children but no grandchildren
+            if not node.children or any(c.children for c in node.children):
+                continue
+
+            if all(cpu in nrg_model.littlest_cpus for cpu in node.cpus):
+                little_clusters.append(node)
+
+        # If there are multiple LITTLE clusters, take the one with the fewest
+        # CPUs
+        cls.cluster = min(little_clusters, key=lambda c: len(c.cpus))
+
+        # Find how many tasks of cls.task_size capacity we can pack into this
+        # cluster at the lowest frequency without putting any CPU over 80%
+        # utilization.
+        cls.tasks_per_cpu = int((cls.cluster.children[0].min_capacity * 0.7
+                                  / cls.task_size))
+
+        num_tasks = cls.tasks_per_cpu * len(cls.cluster.children)
+        print "creating {} tasks".format(num_tasks)
+
+        # Now we expect to find that the most efficient task placement is to
+        # pack them onto the smallest LITTLE cluster.
+        # task_caps = {'t{}'.format(i): cls.task_size for i in range(num_tasks)}
+        # print nrg_model.get_optimal_placements(task_caps)
+
+        duty_cycle_pct = int((100. * cls.task_size) / nrg_model.capacity_scale)
+
+        wload = {
+            'type': 'rt-app',
+            'conf': {
+                'class': 'profile',
+                'params': {
+                    '{}pct'.format(duty_cycle_pct): {
+                        'kind': 'Periodic',
+                        'params': {
+                            'duty_cycle_pct': duty_cycle_pct,
+                            'duration_s': 3
+                        },
+                        'tasks': num_tasks
+                    }
+                },
+            }
+        }
+
+        return {'confs': [energy_aware_conf],
+                'wloads': {'packing_wload': wload}}
+
+    @experiment_test
+    def test_task_placement(self, experiment):
+        pass
+
