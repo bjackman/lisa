@@ -373,13 +373,20 @@ class EnergyModel(object):
     @memoized
     def cpu_groups(self):
         """
-        List of lists of CPUs who share the same active state values
+        List of lists of CPUs considered equivalent for scheduling
+
+        This is the list of CPUs whose active state values are the same
+        (probably meaning they are the same CPU type in a heterogeneous system)
+        and who share a parent node (probably meaning they share the same
+        next-level cache).
         """
+        # TODO TEST ME LOL
         groups = []
         for node in self.cpu_nodes:
             for group in groups:
-                group_states = self.cpu_nodes[group[0]].active_states
-                if node.active_states == group_states:
+                other_node = self.cpu_nodes[group[0]]
+                if (node.active_states == other_node.active_states and
+                    node.parent.cpus == other_node.parent.cpus):
                     group.append(node.cpu)
                     break
             else:
