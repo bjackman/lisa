@@ -231,7 +231,6 @@ class AEP(EnergyMeter):
         # Logging enabled channels
         self._log.info('Channels selected for energy sampling:')
         self._log.info('   %s', str(self._aep.active_channels))
-        self._log.debug('Results dir: %s', self._res_dir)
 
     def _get_energy(self, samples, time, idx, site):
         pwr_total = 0
