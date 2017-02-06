@@ -28,7 +28,7 @@ cluster_active_states = OrderedDict([
 ])
 
 cluster_idle_states = OrderedDict([
-    ('WFI', 107),
+    ('WFI', 47),
     ('cpu-sleep', 47),
     ('cluster-sleep', 0)
 ])
