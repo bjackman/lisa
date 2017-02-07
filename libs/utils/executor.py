@@ -585,6 +585,9 @@ class Executor():
             self.te.emeter.reset()
 
         # WORKLOAD: Run the configured workload
+        postponed_callback = wload.steps['postrun']
+        wload.setCallback('postrun', None)
+
         wload.run(out_dir=experiment.out_dir, cgroup=self._cgroup)
 
         # ENERGY: collect measurements
@@ -606,6 +609,10 @@ class Executor():
             self._log.info('Collected FTrace function profiling:')
             self._log.info('   %s',
                            stats_file.replace(self.te.res_dir, '<res_dir>'))
+
+        if postponed_callback:
+            self._log.info('Calling postrun step')
+            postponed_callback(params={'destdir': experiment.out_dir})
 
         # Unfreeze the tasks we froze
         if need_thaw:

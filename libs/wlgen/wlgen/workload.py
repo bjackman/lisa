@@ -102,8 +102,12 @@ class Workload(object):
         self.steps[step](kwords)
 
     def setCallback(self, step, func):
-        self._log.debug('Setup step [%s] callback to [%s] function',
-                        step, func.__name__)
+        if func:
+            self._log.debug('Setup step [%s] callback to [%s] function',
+                            step, func.__name__)
+        else:
+            self._log.debug('Setup step [%s] callback CLEARED', step)
+
         self.steps[step] = func
 
     def getCpusMask(self, cpus=None):
