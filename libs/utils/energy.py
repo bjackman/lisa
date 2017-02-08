@@ -312,15 +312,20 @@ class ACME(EnergyMeter):
     """
 
     def __init__(self, target, conf, res_dir):
-        super(ACME, self).__init__(target)
+        super(ACME, self).__init__(target, res_dir)
 
         # Assume iio-capture is available in PATH
-        self._iiocapturebin = conf['conf'].get('iio-capture', 'iio-capture')
-        self._hostname = conf['conf'].get('ip_address', 'baylibre-acme.local')
+        iioc = conf.get('conf', {
+            'iio-capture' : 'iio-capture',
+            'ip_address'  : 'baylibre-acme.local',
+        })
+        self._iiocapturebin = iioc.get('iio-capture', 'iio-capture')
+        self._hostname = iioc.get('ip_address', 'baylibre-acme.local')
+
         self._channels = conf.get('channel_map', {
             'CH0': '0'
         })
-        self._iio = [None] * len(self._channels)
+        self._iio = {}
 
         self._log.info('ACME configuration:')
         self._log.info('    binary: %s', self._iiocapturebin)
