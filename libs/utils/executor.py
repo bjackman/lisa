@@ -566,36 +566,19 @@ class Executor():
         self._log.debug('out_dir set to [%s]', experiment.out_dir)
         os.system('mkdir -p ' + experiment.out_dir)
 
-        # Freeze all userspace tasks that we don't need for running tests
-        need_thaw = False
+        calls = []
         if self._target_conf_flag(tc, 'freeze_userspace'):
-            need_thaw = self._freeze_userspace()
+            calls.append((self._freeze_userspace, self._thaw_userspace))
 
-        # FTRACE: start (if a configuration has been provided)
-        if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
+        def start_ftrace():
             self._log.warning('FTrace events collection enabled')
             self.te.ftrace.start()
 
-        # Ensure cpu_frequency events are present if supported
-        if hasattr(self.target, 'cpufreq'):
-            self.target.cpufreq.trace_frequencies()
+            # Ensure cpu_frequency events are present if supported
+            if hasattr(self.target, 'cpufreq'):
+                self.target.cpufreq.trace_frequencies()
 
-        # ENERGY: start sampling
-        if self.te.emeter:
-            self.te.emeter.reset()
-
-        # WORKLOAD: Run the configured workload
-        postponed_callback = wload.steps['postrun']
-        wload.setCallback('postrun', None)
-
-        wload.run(out_dir=experiment.out_dir, cgroup=self._cgroup)
-
-        # ENERGY: collect measurements
-        if self.te.emeter:
-            self.te.emeter.report(experiment.out_dir)
-
-        # FTRACE: stop and collect measurements
-        if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
+        def stop_ftrace():
             self.te.ftrace.stop()
 
             trace_file = experiment.out_dir + '/trace.dat'
@@ -610,13 +593,56 @@ class Executor():
             self._log.info('   %s',
                            stats_file.replace(self.te.res_dir, '<res_dir>'))
 
+        # FTRACE: start (if a configuration has been provided)
+        if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
+            calls.append((start_ftrace, stop_ftrace))
+
+        def start_energy():
+            self.te.emeter.reset()
+        def stop_energy():
+            self.te.emeter.report(experiment.out_dir)
+
+        # ENERGY: start sampling
+        if self.te.emeter:
+            calls.append((start_energy, stop_energy))
+
+        postponed_callback = wload.steps['postrun']
+        wload.setCallback('postrun', None)
+
+        post_calls = []
+        for pre_call, post_call in calls:
+            try:
+                pre_call()
+            except:
+                self._log.error('Workload pre-action [%s] failed',
+                                pre_call.__name__, exc_info=True)
+            else:
+                post_calls.append(post_call)
+
+        # WORKLOAD: Run the configured workload
+        error_to_raise = None
+        try:
+            wload.run(out_dir=experiment.out_dir, cgroup=self._cgroup)
+        except Exception as e:
+            self._log.error(
+                'Workload [%s] execution failed, continuing post-actions',
+                wload.name, exc_info=True)
+            error_to_raise = e
+
+        for post_call in reversed(post_calls):
+            try:
+                post_call()
+            except Exception as e:
+                self._log.error('Workload post-action [%s] failed',
+                                post_call.__name__, exc_info=True)
+                error_to_raise = error_to_raise or e
+
+        if error_to_raise:
+            raise error_to_raise
+
         if postponed_callback:
             self._log.info('Calling postrun step')
             postponed_callback(params={'destdir': experiment.out_dir})
-
-        # Unfreeze the tasks we froze
-        if need_thaw:
-            self._thaw_userspace()
 
         self._print_footer()
 
