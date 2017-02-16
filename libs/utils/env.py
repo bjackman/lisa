@@ -707,6 +707,18 @@ class TestEnv(ShareState):
         # Adding topology information
         self.platform['topology'] = self.topology.get_level("cluster")
 
+        # Adding kernel build information
+        kver = self.target.kernel_version
+        self.platform['kernel'] = {t: getattr(kver, t, '') \
+            for t in [
+                'release', 'version',
+                'version_number', 'major', 'minor',
+                'rc', 'sha1'
+            ]
+        }
+        self.platform['abi'] = self.target.abi
+        self.platform['os'] = self.target.os
+
         self._log.debug('Platform descriptor initialized\n%s', self.platform)
         # self.platform_dump('./')
 
@@ -975,6 +987,10 @@ class TestEnv(ShareState):
 
 IFCFG_BCAST_RE = re.compile(
     r'Bcast:(.*) '
+)
+
+KVERSION_RE = re.compile(
+    r'(?P<ver>\d+\.\d+).*-g(?P<sha1>[0-9a-fA-F]{7,})'
 )
 
 # vim :set tabstop=4 shiftwidth=4 expandtab
