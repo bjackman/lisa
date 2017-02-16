@@ -32,7 +32,7 @@ apt-get -y remove ipython ipython-notebook
 
 apt-get -y install \
     trace-cmd sshpass kernelshark nmap net-tools tree python-matplotlib \
-    python-numpy libfreetype6-dev libpng12-dev python-nose python-pip \
+    libfreetype6-dev libpng12-dev python-nose python-pip \
     python-dev iputils-ping git wget expect
 
 # Upgrade pip so we can use wheel packages instead of compiling stuff, this is
