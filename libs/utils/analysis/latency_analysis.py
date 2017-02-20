@@ -388,8 +388,7 @@ class LatencyAnalysis(AnalysisModule):
             512: "P", # TASK_PARKED
            1024: "N", # TASK_NOLOAD
         }
-        kver = float(self._trace.platform.get('kernel_version', '3.18'))
-        if kver > 4.7:
+        if self._trace.platform['kernel']['parts'] >= (4, 8):
             TASK_STATES[2048] = "n" # TASK_NEW
         TASK_MAX_STATE = 2 * max(TASK_STATES)
 
