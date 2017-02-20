@@ -709,11 +709,11 @@ class TestEnv(ShareState):
 
         # Adding kernel build information
         kver = self.target.kernel_version
-        self.platform['kernel'] = {t: getattr(kver, t, '') \
+        self.platform['kernel'] = {t: getattr(kver, t, None)
             for t in [
                 'release', 'version',
                 'version_number', 'major', 'minor',
-                'rc', 'sha1'
+                'rc', 'sha1', 'parts'
             ]
         }
         self.platform['abi'] = self.target.abi
