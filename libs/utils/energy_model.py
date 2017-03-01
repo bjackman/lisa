@@ -540,7 +540,7 @@ class EnergyModel(object):
         return freqs
 
     def _estimate_from_active_time(self, cpu_active_time, freqs, idle_states,
-                                   combine):
+                                   util_aggregator, combine):
         """Helper for estimate_from_cpu_util
 
         Like estimate_from_cpu_util but uses active time i.e. proportion of time
@@ -565,12 +565,8 @@ class EnergyModel(object):
             freq = freqs[cpus[0]]
             assert all(freqs[c] == freq for c in cpus[1:])
 
-            # The active time of a node is estimated as the max of the active
-            # times of its children.
-            # This works great for the synthetic periodic workloads we use in
-            # LISA (where all threads wake up at the same time) but is probably
-            # no good for real workloads.
-            active_time = max(cpu_active_time[c] for c in cpus)
+            active_time = min(util_aggregator(cpu_active_time[c] for c in cpus),
+                              1.0)
             active_power = node.active_states[freq].power * active_time
 
             _idle_power = max(node.idle_states[idle_states[c]] for c in cpus)
@@ -585,7 +581,8 @@ class EnergyModel(object):
 
         return ret
 
-    def estimate_from_cpu_util(self, cpu_utils, freqs=None, idle_states=None):
+    def estimate_from_cpu_util(self, cpu_utils, freqs=None, idle_states=None,
+                               util_aggregator=max, combine=True):
         """
         Estimate the energy usage of the system under a utilization distribution
 
@@ -600,6 +597,22 @@ class EnergyModel(object):
                       default.
         :param idle_states: List of CPU frequencies. Got from
                             :meth:`guess_idle_states` by default.
+
+        :param util_aggregator: Each node's power is estimated using a notion of
+            "active time". For CPUs this is simply the proportion of time the
+            CPU spends non-idle. For higher-level nodes (e.g. representing
+            "clusters") the true active time is the time where any constituent
+            CPUs were not idle. However we don't have that detail of
+            information. Instead we estimate the active time by aggregating
+            constituent CPU active time. The most likely aggregators are
+            :func:`max` (the optimistic case - assuming the maximum degree of
+            overlap between task activations on different CPUs) and :func:`sum`
+            (the pessimistic case). Aggregated utilization is capped at 100%.
+
+        :param zero_idle: The model separately estimates, then combines, power
+            for CPU active time and CPU idle time. The idle power estimation is
+            rather inaccurate, so set zero_idle=True to consider only the CPU
+            active power.
 
         :returns: Dict with power in bogo-Watts (bW), with contributions from
                   each system component keyed with a tuple of the CPUs
@@ -633,7 +646,9 @@ class EnergyModel(object):
             cpu_active_time.append(min(float(cpu_utils[cpu]) / cap, 1.0))
 
         return self._estimate_from_active_time(cpu_active_time,
-                                               freqs, idle_states, combine=True)
+                                               freqs, idle_states,
+                                               util_aggregator,
+                                               combine=combine)
 
     def get_optimal_placements(self, capacities):
         """Find the optimal distribution of work for a set of tasks
