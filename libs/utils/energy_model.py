@@ -198,6 +198,11 @@ class EnergyModelNode(_CpuTree):
         """Compute capacity at highest frequency"""
         return max(s.capacity for s in self.active_states.values())
 
+    @property
+    def min_capacity(self):
+        """Compute capacity at lowest frequency"""
+        return min(s.capacity for s in self.active_states.values())
+
 class EnergyModelRoot(EnergyModelNode):
     """
     Convenience class for root of an EnergyModelNode tree.
