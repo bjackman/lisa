@@ -584,12 +584,19 @@ class EnergyModel(object):
             active_time = min(util_aggregator(cpu_active_time[c] for c in cpus),
                               1.0)
             active_power = node.active_states[freq].power * active_time
+            self._log.debug(
+                "Node {}: active time {} * power {} = active_power {}".format(
+                    cpus, active_time, node.active_states[freq].power,
+                    active_power))
 
             if zero_idle:
                 idle_power = 0
             else:
                 _idle_power = max(node.idle_states[idle_states[c]] for c in cpus)
                 idle_power = _idle_power * (1 - active_time)
+                self._log.debug(
+                    "Node {}: idle time {} * power {} = idle_power {}".format(
+                        cpus, 1 - active_time, _idle_power, idle_power))
 
             if combine:
                 ret[cpus] = active_power + idle_power
@@ -664,6 +671,8 @@ class EnergyModel(object):
             assert (cpu,) == node.cpus
             cap = node.active_states[freqs[cpu]].capacity
             cpu_active_time.append(min(float(cpu_utils[cpu]) / cap, 1.0))
+
+        self._log.debug("cpu_active_time: {}".format(cpu_active_time))
 
         return self._estimate_from_active_time(cpu_active_time,
                                                freqs, idle_states,
