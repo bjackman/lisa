@@ -36,6 +36,7 @@ from libs.utils.platforms.hikey_energy import hikey_energy
 
 little_cluster_active_states = OrderedDict([
     (1000, ActiveState(power=10)),
+    (1500, ActiveState(power=15)),
     (2000, ActiveState(power=20)),
 ])
 
@@ -147,6 +148,54 @@ class TestInvalid(TestCase):
                         root_power_domain=PowerDomain(
                             idle_states=[], children=[cpu_pd(0), cpu_pd(1)]),
                         freq_domains=[[0], [1]]),
+
+class TestFlatten(TestCase):
+    def test_flatten_energy(self):
+        flattened = em.flatten_energy()
+        for node in flattened.root.iter_nodes():
+            if node.children:
+                # Non-leaf node. Any energy data should be zero
+                active_states = node.active_states or {}
+                self.assertTrue(
+                    all(s.power == 0 for s in active_states.values()))
+                idle_states = node.idle_states or {}
+                self.assertTrue(
+                    all(p == 0 for p in idle_states.values()))
+
+        leaf_idle_power = {}
+        for state in flattened.cpu_nodes[0].idle_states:
+            leaf_idle_power[state] = [n.idle_states[state]
+                                      for n in flattened.cpu_nodes]
+
+        self.assertDictEqual(leaf_idle_power, {
+            'WFI' :            [7.5, 7.5, 13.0, 13.0],
+            'cpu-sleep-0':     [2.5, 2.5, 4.0, 4.0],
+            'cluster-sleep-0': [0.5, 0.5, 1.0, 1.0],
+        })
+
+        self.assertDictEqual(flattened.cpu_nodes[0].active_states, OrderedDict([
+            (1000, ActiveState(capacity=100, power=105.0)),
+            (1500, ActiveState(capacity=150, power=157.5)),
+            (2000, ActiveState(capacity=200, power=210.0)),
+        ]))
+        self.assertDictEqual(flattened.cpu_nodes[0].active_states,
+                             flattened.cpu_nodes[1].active_states)
+
+        self.assertDictEqual(flattened.cpu_nodes[2].active_states, OrderedDict([
+            (3000, ActiveState(capacity=300, power=315)),
+            (4000, ActiveState(capacity=400, power=420)),
+        ]))
+        self.assertDictEqual(flattened.cpu_nodes[2].active_states,
+                             flattened.cpu_nodes[3].active_states)
+
+    def test_flatten_power_domains(self):
+        flattened = em.flatten_power_domains()
+        self.assertListEqual(flattened.root_pd.idle_states, [])
+        self.assertEqual(len(flattened.root_pd.children), 4)
+        for pd in flattened.root_pd.children:
+            self.assertListEqual(pd.children, [])
+            self.assertListEqual(pd.idle_states,
+                                 ['WFI', 'cpu-sleep-0', 'cluster-sleep-0'])
 
 
 class TestOptimalPlacement(TestCase):
