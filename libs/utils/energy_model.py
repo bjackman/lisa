@@ -540,7 +540,7 @@ class EnergyModel(object):
         return freqs
 
     def _estimate_from_active_time(self, cpu_active_time, freqs, idle_states,
-                                   util_aggregator, combine):
+                                   util_aggregator, combine, zero_idle):
         """Helper for estimate_from_cpu_util
 
         Like estimate_from_cpu_util but uses active time i.e. proportion of time
@@ -569,8 +569,11 @@ class EnergyModel(object):
                               1.0)
             active_power = node.active_states[freq].power * active_time
 
-            _idle_power = max(node.idle_states[idle_states[c]] for c in cpus)
-            idle_power = _idle_power * (1 - active_time)
+            if zero_idle:
+                idle_power = 0
+            else:
+                _idle_power = max(node.idle_states[idle_states[c]] for c in cpus)
+                idle_power = _idle_power * (1 - active_time)
 
             if combine:
                 ret[cpus] = active_power + idle_power
@@ -582,7 +585,8 @@ class EnergyModel(object):
         return ret
 
     def estimate_from_cpu_util(self, cpu_utils, freqs=None, idle_states=None,
-                               util_aggregator=max, combine=True):
+                               util_aggregator=max, combine=True,
+                               zero_idle=False):
         """
         Estimate the energy usage of the system under a utilization distribution
 
@@ -648,7 +652,8 @@ class EnergyModel(object):
         return self._estimate_from_active_time(cpu_active_time,
                                                freqs, idle_states,
                                                util_aggregator,
-                                               combine=combine)
+                                               combine=combine,
+                                               zero_idle=zero_idle)
 
     def get_optimal_placements(self, capacities):
         """Find the optimal distribution of work for a set of tasks
