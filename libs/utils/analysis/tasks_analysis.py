@@ -182,6 +182,25 @@ class TasksAnalysis(AnalysisModule):
 
         return rt_tasks
 
+    def _dfg_task_cpus(self):
+        """
+        CPUs that tasks ran on
+
+        Roughly equivalent to the ``task_cpu`` function in Linux. Reports the
+        CPU that each task last ran on at each moment in time. One column for
+        each PID.
+        """
+        # pids = [p for name, task in tasks.iteritems() for p in task['pid']]
+        df = self._dfg_trace_event('sched_switch')[['next_pid', '__cpu']]
+        # Avoid duplicates in index
+        df = df.groupby(level=0).last()
+        # df = df[df['next_pid'].isin(tasks)]
+        df = df.pivot(index=df.index, columns='next_pid').fillna(method='ffill')
+        df = df['__cpu']
+        # Drop consecutive duplicates
+        df = df[(df.shift(+1) != df).any(axis=1)]
+        return df
+
 
 ###############################################################################
 # Plotting Methods
