@@ -627,7 +627,7 @@ class EnergyModel(object):
             # For now we assume topology nodes with energy models do not overlap
             # with frequency domains
             freq = freqs[cpus[0]]
-            assert all(freqs[c] == freq for c in cpus[1:])
+            # assert all(freqs[c] == freq for c in cpus[1:]):
 
             active_time = min(util_aggregator(cpu_active_time[c] for c in cpus),
                               1.0)
@@ -807,6 +807,86 @@ class EnergyModel(object):
         self._log.debug('%14s - Done', 'EnergyModel')
         return ret
 
+    def estimate_from_trace(self, trace, flags=[], component=None,
+                            sample_index=None, method='accurate'):
+        """
+        FIXME: everything about this method is Bad
+        """
+        # The Trappy grammar parser retains an aggregation DataFrame of the data
+        # is has parsed, adding the new data each time you parse a new
+        # expression. For our use case this brings about an inscrutable Pandas
+        # error that can only be reproduced once for each invocation of
+        # Python. Instead of debugging something insane like that let's just
+        # build a new Parser object for each expression we want to parse,
+        # avoiding the aggregation call.
+        parser = Parser(trace.ftrace)
+        idle = parser.solve('cpu_idle:state')
+        parser = Parser(trace.ftrace)
+        freqs = parser.solve('cpu_frequency:frequency')
+        parser = Parser(trace.ftrace)
+        util = parser.solve('sched_load_avg_cpu:util_avg')
+
+        # assert all(df.columns.tolist() == self.cpus for df in [idle, util])
+
+        columns = [tuple(n.cpus) for n in self.root.iter_nodes()
+                   if n.active_states and n.idle_states]
+
+        inputs = pd.concat([idle, util, freqs], axis=1,
+                           keys=['idle', 'util', 'freq']).ffill()
+        if sample_index is not None:
+            inputs = inputs.reindex(sample_index, method='ffill')
+        # Drop consecutive duplicates
+        inputs = inputs[(inputs.shift(+1) != inputs).any(axis=1)]
+        # Drop stuff at the beginning where we don't have the inputs
+        # (e.e. where we have had our first cpu_idle event but no cpu_frequency)
+        inputs = inputs.dropna()
+
+        ret = pd.DataFrame(columns=columns)
+
+        from time import time as pc
+        pandas_time = 0
+        me_time = 0
+
+        for time, input_row in inputs.iterrows():
+
+            idle_idxs = [int(i) for i in input_row['idle']]
+            cpus_active = [i != -1 for i in idle_idxs]
+            if method == 'accurate':
+                # Minimize the real hardware idle states
+                deepest_possible = self._deepest_idle_idxs(cpus_active)
+                idle_idxs = [min(i, j) for i, j
+                             in zip(deepest_possible, idle_idxs)]
+
+                # In accurate mode, we don't use tracked load, we just treat a
+                # CPU as active or idle, so set util to 0 or 100%. This is
+                # probably a low-hanging fruit if you're optimising this
+                # function (but not as low-hanging as tweaking the way the
+                # return DataFrame is allocated/constructed)
+                utils = [0 if i == -1 else self.capacity_scale
+                         for i in idle_idxs]
+                freqs = input_row['freq']
+            else:
+                utils = [int(u) for u in input_row['util']]
+                freqs = None
+
+            idles = [n.idle_state_by_idx(max(i, 0))
+                     for n, i in zip(self.cpu_nodes, idle_idxs)]
+
+            nrg = self.estimate_from_cpu_util(
+                cpu_utils=utils, idle_states=idles, freqs=freqs,
+                combine=not bool(component), util_aggregator=sum)
+
+            if component:
+                del nrg['power']
+                nrg = {k: nrg[k][component] for k in nrg}
+
+            # TODO this bit is slow. Dunno why, probably reallocating
+            # memory. Maybe we can speed this up using DataFrame.apply instead
+            # of DataFrame.iterrows.
+            ret.loc[time] = {c: nrg[c] for c in columns}
+
+        return ret
+
     def mimic_sched_group_energy(self, trace, flags=[], component=None,
                                  sample_index=None):
         """
@@ -835,61 +915,9 @@ class EnergyModel(object):
               ``use_power_domains``
                 Rectify the idle state traces to reflect hardware power domains
         """
-        # The Trappy grammar parser retains an aggregation DataFrame of the data
-        # is has parsed, adding the new data each time you parse a new
-        # expression. For our use case this brings about an inscrutable Pandas
-        # error that can only be reproduced once for each invocation of
-        # Python. Instead of debugging something insane like that let's just
-        # build a new Parser object for each expression we want to parse,
-        # avoiding the aggregation call.
-        parser = Parser(trace.ftrace)
-        idle = parser.solve('cpu_idle:state')
-        parser = Parser(trace.ftrace)
-        util = parser.solve('sched_load_avg_cpu:util_avg')
-
-        # assert all(df.columns.tolist() == self.cpus for df in [idle, util])
-
-        columns = [tuple(n.cpus) for n in self.root.iter_nodes()
-                   if n.active_states and n.idle_states]
-
-        inputs = pd.concat([idle, util], axis=1,
-                           keys=['idle', 'util']).ffill()
-        if sample_index is not None:
-            inputs = inputs.reindex(sample_index, method='ffill')
-        inputs = inputs.dropna().drop_duplicates()
-
-        ret = pd.DataFrame(columns=columns)
-
-        from time import time as pc
-        pandas_time = 0
-        me_time = 0
-
-        for time, input_row in inputs.iterrows():
-            utils = [int(u) for u in input_row['util']]
-
-            idle_idxs = [int(i) for i in input_row['idle']]
-            if 'use_power_domains' in flags:
-                cpus_active = [i != -1 for i in idle_idxs]
-                deepest_possible = self._deepest_idle_idxs(cpus_active)
-                idle_idxs = [min(i, j) for i, j
-                             in zip(deepest_possible, idle_idxs)]
-            idles = [n.idle_state_by_idx(max(i, 0))
-                     for n, i in zip(self.cpu_nodes, idle_idxs)]
-
-            nrg = self.estimate_from_cpu_util(
-                cpu_utils=utils, idle_states=idles,
-                combine=not bool(component), util_aggregator=sum)
-
-            if component:
-                del nrg['power']
-                nrg = {k: nrg[k][component] for k in nrg}
-
-            # TODO this bit is slow. Dunno why, probably reallocating
-            # memory. Maybe we can speed this up using DataFrame.apply instead
-            # of DataFrame.iterrows.
-            ret.loc[time] = {c: nrg[c] for c in columns}
-
-        return ret
+        return self.estimate_from_trace(
+            self, trace, flags, component,
+            sample_index, method='sched_group_energy')
 
     def flatten_energy(self):
         return self.__class__(
