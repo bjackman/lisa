@@ -850,7 +850,7 @@ class EnergyModel(object):
         for time, input_row in inputs.iterrows():
 
             idle_idxs = [int(i) for i in input_row['idle']]
-            cpus_active = [i != -1 for i in idle_idxs]
+            cpus_active = [i == -1 for i in idle_idxs]
             if method == 'accurate':
                 # Minimize the real hardware idle states
                 deepest_possible = self._deepest_idle_idxs(cpus_active)
@@ -862,9 +862,8 @@ class EnergyModel(object):
                 # probably a low-hanging fruit if you're optimising this
                 # function (but not as low-hanging as tweaking the way the
                 # return DataFrame is allocated/constructed)
-                utils = [0 if i == -1 else self.capacity_scale
-                         for i in idle_idxs]
-                freqs = input_row['freq']
+                utils = [self.capacity_scale * (i == -1) for i in idle_idxs]
+                freqs = input_row['freq'].tolist()
             else:
                 utils = [int(u) for u in input_row['util']]
                 freqs = None
@@ -877,7 +876,6 @@ class EnergyModel(object):
                 combine=not bool(component), util_aggregator=sum)
 
             if component:
-                del nrg['power']
                 nrg = {k: nrg[k][component] for k in nrg}
 
             # TODO this bit is slow. Dunno why, probably reallocating
@@ -916,7 +914,7 @@ class EnergyModel(object):
                 Rectify the idle state traces to reflect hardware power domains
         """
         return self.estimate_from_trace(
-            self, trace, flags, component,
+            trace, flags, component,
             sample_index, method='sched_group_energy')
 
     def flatten_energy(self):
