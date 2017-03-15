@@ -476,7 +476,7 @@ class Executor():
             return None
         cpus = wlspec['conf']['cpus']
 
-        if type(cpus) == list:
+        if type(cpus) in (list, tuple):
             return cpus
         if type(cpus) == int:
             return [cpus]
