@@ -16,6 +16,7 @@
 #
 from collections import namedtuple
 from copy import deepcopy
+import json
 import shutil
 import os
 from unittest import TestCase
@@ -130,6 +131,36 @@ class TestTaskNames(SetUpTarget):
         exp_names = ['task_mytask_{}'.format(i) for i in range(num_tasks)]
         self.run_and_assert_task_names(experiments_conf, exp_names)
 
+class TestWorkloadDuration(SetUpTarget):
+    """Test that the 'duration' field for wlspecs is used"""
+    def test_duration_profile(self):
+        wlspec = deepcopy(example_wl)
+
+        DURATION = 3
+
+        wlspec['duration'] = DURATION
+
+        print wlspec
+
+        experiments_conf = {
+            'confs': [{
+                'tag': 'myconf'
+            }],
+            "wloads" : {
+                'mywl': wlspec
+            },
+        }
+
+        executor = Executor(self.te, experiments_conf)
+        executor.run()
+        [experiment] = executor.experiments
+        with open(experiment.wload.json) as f:
+            rtapp_conf = json.load(f)
+
+        dur = rtapp_conf['global']['duration']
+        self.assertEqual(dur, DURATION,
+                         'Wrong global.duration field in rtapp JSON. '
+                         'Expected {}, found {}'.format(DURATION, dur))
 
 class TestMagicSmoke(SetUpTarget):
     def get_rta_results_dir(self, conf_name, wl_name):
