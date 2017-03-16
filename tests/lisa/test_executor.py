@@ -17,6 +17,7 @@
 from collections import namedtuple
 from copy import deepcopy
 import json
+import logging
 import shutil
 import os
 from unittest import TestCase
@@ -30,6 +31,10 @@ from executor import Executor
 import wlgen
 
 class SetUpTarget(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._log = logging.getLogger('TestExecutor')
+
     def setUp(self):
         self.res_dir='test_{}'.format(self.__class__.__name__)
         self.te = TestEnv(target_conf={
@@ -98,7 +103,7 @@ class TestTaskNames(SetUpTarget):
 
         wlspec['conf']['prefix'] = 'PREFIX'
 
-        print wlspec
+        self._log.debug(wlspec)
 
         experiments_conf = {
             'confs': [{
@@ -117,7 +122,7 @@ class TestTaskNames(SetUpTarget):
 
         wlspec['conf']['params']['mytask']['tasks'] = num_tasks
 
-        print wlspec
+        self._log.debug(wlspec)
 
         experiments_conf = {
             'confs': [{
@@ -140,7 +145,7 @@ class TestWorkloadDuration(SetUpTarget):
 
         wlspec['duration'] = DURATION
 
-        print wlspec
+        self._log.debug(wlspec)
 
         experiments_conf = {
             'confs': [{
@@ -233,7 +238,7 @@ class TestFreezeUserspace(SetUpTarget):
                 ['init', 'systemd', 'sh', 'ssh'])
             freezer_mock.reset_mock()
 
-        print wlgen.RTA
+        self._log.debug(wlgen.RTA)
         wlgen.RTA.pre_callback = assert_frozen
 
         executor = Executor(self.te, experiments_conf)
