@@ -251,6 +251,7 @@ class Executor():
         self._print_section('Experiments execution')
 
         self.experiments = []
+        self.te.platform_dump(self.te.res_dir)
 
         # Run all the configured experiments
         exp_idx = 0
@@ -691,7 +692,6 @@ class Executor():
         test_dir = '{}/{}:{}:{}'\
             .format(self.te.res_dir, wload.wtype, tc_idx, wl_idx)
         os.makedirs(test_dir)
-        self.te.platform_dump(test_dir)
 
         # Keep track of kernel configuration and version
         config = self.target.config
