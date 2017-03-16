@@ -629,6 +629,57 @@ class Executor():
                          'workload specification'
                          .format(wl_idx))
 
+    _exp_dir_regex = re.compile(r'(.*):(.*):(.*)')
+
+    @classmethod
+    def find_experiments(cls, base_dir):
+        """
+        Read a results dir from a previous execution and return Experiments
+
+        :param base_dir: Path to directory where results were previously stored.
+            This will have been the value of :attr:`TestEnv.res_dir` when the
+            experiments were run.
+        :returns: List of :class:`Experiment` objects.
+        """
+        log = logging.getLogger('Executor')
+        experiments = []
+
+        log.warning(
+            'Reconstructing Experiment.wload not yet supported, will be None')
+        log.warning(
+            'Reconstructing Experiment.conf not yet supported, will be None')
+
+        # Each subdirectory represents a wload/conf pair
+        for subdir in os.listdir(base_dir):
+            wload_conf_dir = os.path.join(base_dir, subdir)
+            if not os.path.isdir(wload_conf_dir):
+                continue
+
+            match = cls._exp_dir_regex.match(wload_conf_dir)
+            if not match:
+                log.error('Unrecognised experiment directory "{}" in {}',
+                          subdir, base_dir)
+                continue
+
+            wtype, conf_tag, wl_name = match.groups()
+
+            # Each subdirectory represents an iteration for the wload/conf pair
+            for subdir in os.listdir(wload_conf_dir):
+                exp_dir = os.path.join(wload_conf_dir, subdir)
+                if not os.path.isdir(exp_dir):
+                    continue
+                try:
+                    iteration = int(subdir)
+                except ValueError:
+                    log.error('Unrecognised iteration directory "{}" in {}',
+                              subdir, wload_conf_dir)
+
+                ex = Experiment(wload_name=wl_name, wload=None, conf=None,
+                                iteration=iteration, out_dir=exp_dir)
+                experiments.append(ex)
+
+        return experiments
+
     def _wload_init(self, tc, wl_idx):
         tc_idx = tc['tag']
 
