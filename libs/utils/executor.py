@@ -40,6 +40,8 @@ from devlib import TargetError
 Experiment = namedtuple('Experiment', ['wload_name', 'wload',
                                        'conf', 'iteration', 'out_dir'])
 
+import contextlib
+
 class Executor():
     """
     Abstraction for running sets of experiments and gathering data from targets
@@ -658,6 +660,27 @@ class Executor():
 
         return wload, test_dir
 
+    @contextlib.contextmanager
+    def _freeze_userspace(self):
+        if 'cgroups' not in self.target.modules:
+            raise RuntimeError(
+                'Failed to freeze userspace. Ensure "cgroups" module is listed '
+                'among modules in target/test configuration')
+        controllers = [s.name for s in self.target.cgroups.list_subsystems()]
+        if 'freezer' not in controllers:
+            self._log.warning('No freezer cgroup controller on target. '
+                              'Not freezing userspace')
+            yield
+        else:
+            exclude = self.critical_tasks[self.te.target.os]
+            self._log.info('Freezing all tasks except: %s', ','.join(exclude))
+            self.te.target.cgroups.freeze(exclude)
+
+            yield
+
+            self._log.info('Un-freezing userspace tasks')
+            self.te.target.cgroups.freeze(thaw=True)
+
     def _wload_run(self, exp_idx, experiment):
         tc = experiment.conf
         wload = experiment.wload
@@ -672,69 +695,40 @@ class Executor():
         self._log.debug('out_dir set to [%s]', experiment.out_dir)
         os.system('mkdir -p ' + experiment.out_dir)
 
-        # Freeze all userspace tasks that we don't need for running tests
-        need_thaw = False
-        if self._target_conf_flag(tc, 'freeze_userspace'):
-            need_thaw = self._freeze_userspace()
+        with self._freeze_userspace():
+            # FTRACE: start (if a configuration has been provided)
+            if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
+                self._log.warning('FTrace events collection enabled')
+                self.te.ftrace.start()
 
-        # FTRACE: start (if a configuration has been provided)
-        if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
-            self._log.warning('FTrace events collection enabled')
-            self.te.ftrace.start()
+            # ENERGY: start sampling
+            if self.te.emeter:
+                self.te.emeter.reset()
 
-        # ENERGY: start sampling
-        if self.te.emeter:
-            self.te.emeter.reset()
+            # WORKLOAD: Run the configured workload
+            wload.run(out_dir=experiment.out_dir, cgroup=self._cgroup)
 
-        # WORKLOAD: Run the configured workload
-        wload.run(out_dir=experiment.out_dir, cgroup=self._cgroup)
+            # ENERGY: collect measurements
+            if self.te.emeter:
+                self.te.emeter.report(experiment.out_dir)
 
-        # ENERGY: collect measurements
-        if self.te.emeter:
-            self.te.emeter.report(experiment.out_dir)
+            # FTRACE: stop and collect measurements
+            if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
+                self.te.ftrace.stop()
 
-        # FTRACE: stop and collect measurements
-        if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
-            self.te.ftrace.stop()
+                trace_file = experiment.out_dir + '/trace.dat'
+                self.te.ftrace.get_trace(trace_file)
+                self._log.info('Collected FTrace binary trace:')
+                self._log.info('   %s',
+                            trace_file.replace(self.te.res_dir, '<res_dir>'))
 
-            trace_file = experiment.out_dir + '/trace.dat'
-            self.te.ftrace.get_trace(trace_file)
-            self._log.info('Collected FTrace binary trace:')
-            self._log.info('   %s',
-                           trace_file.replace(self.te.res_dir, '<res_dir>'))
+                stats_file = experiment.out_dir + '/trace_stat.json'
+                self.te.ftrace.get_stats(stats_file)
+                self._log.info('Collected FTrace function profiling:')
+                self._log.info('   %s',
+                            stats_file.replace(self.te.res_dir, '<res_dir>'))
 
-            stats_file = experiment.out_dir + '/trace_stat.json'
-            self.te.ftrace.get_stats(stats_file)
-            self._log.info('Collected FTrace function profiling:')
-            self._log.info('   %s',
-                           stats_file.replace(self.te.res_dir, '<res_dir>'))
-
-        # Unfreeze the tasks we froze
-        if need_thaw:
-            self._thaw_userspace()
-
-        self._print_footer()
-
-    def _freeze_userspace(self):
-        if 'cgroups' not in self.target.modules:
-            raise RuntimeError(
-                'Failed to freeze userspace. Ensure "cgroups" module is listed '
-                'among modules in target/test configuration')
-        controllers = [s.name for s in self.target.cgroups.list_subsystems()]
-        if 'freezer' not in controllers:
-            self._log.warning('No freezer cgroup controller on target. '
-                              'Not freezing userspace')
-            return False
-
-        exclude = self.critical_tasks[self.te.target.os]
-        self._log.info('Freezing all tasks except: %s', ','.join(exclude))
-        self.te.target.cgroups.freeze(exclude)
-        return True
-
-
-    def _thaw_userspace(self):
-        self._log.info('Un-freezing userspace tasks')
-        self.te.target.cgroups.freeze(thaw=True)
+            self._print_footer()
 
 ################################################################################
 # Utility Functions
