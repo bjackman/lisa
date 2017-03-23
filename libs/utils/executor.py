@@ -661,25 +661,44 @@ class Executor():
         return wload, test_dir
 
     @contextlib.contextmanager
-    def _freeze_userspace(self):
-        if 'cgroups' not in self.target.modules:
-            raise RuntimeError(
-                'Failed to freeze userspace. Ensure "cgroups" module is listed '
-                'among modules in target/test configuration')
-        controllers = [s.name for s in self.target.cgroups.list_subsystems()]
-        if 'freezer' not in controllers:
-            self._log.warning('No freezer cgroup controller on target. '
-                              'Not freezing userspace')
+    def _collect_ftrace_ctx(self, ftrace, out_dir):
+        self._log.warning('FTrace events collection enabled')
+        ftrace.start()
+        try:
             yield
-        else:
-            exclude = self.critical_tasks[self.te.target.os]
-            self._log.info('Freezing all tasks except: %s', ','.join(exclude))
-            self.te.target.cgroups.freeze(exclude)
+        finally:
+            ftrace.stop()
 
+            trace_file = out_dir + '/trace.dat'
+            ftrace.get_trace(trace_file)
+            self._log.info('Collected FTrace binary trace:')
+            self._log.info('   %s',
+                        trace_file.replace(self.te.res_dir, '<res_dir>'))
+
+            stats_file = out_dir + '/trace_stat.json'
+            ftrace.get_stats(stats_file)
+            self._log.info('Collected FTrace function profiling:')
+            self._log.info('   %s',
+                           stats_file.replace(self.te.res_dir, '<res_dir>'))
+
+    @contextlib.contextmanager
+    def _freeze_userspace_ctx(self):
+        exclude = self.critical_tasks[self.te.target.os]
+        self._log.info('Freezing all tasks except: %s', ','.join(exclude))
+        self.te.target.cgroups.freeze(exclude)
+        try:
             yield
-
+        finally:
             self._log.info('Un-freezing userspace tasks')
             self.te.target.cgroups.freeze(thaw=True)
+
+    @contextlib.contextmanager
+    def _collect_energy_ctx(self, emeter, out_dir):
+        emeter.reset()
+        try:
+            yield
+        finally:
+            emeter.report(out_dir)
 
     def _wload_run(self, exp_idx, experiment):
         tc = experiment.conf
@@ -695,40 +714,32 @@ class Executor():
         self._log.debug('out_dir set to [%s]', experiment.out_dir)
         os.system('mkdir -p ' + experiment.out_dir)
 
-        with self._freeze_userspace():
-            # FTRACE: start (if a configuration has been provided)
-            if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
-                self._log.warning('FTrace events collection enabled')
-                self.te.ftrace.start()
+        contexts = []
 
-            # ENERGY: start sampling
-            if self.te.emeter:
-                self.te.emeter.reset()
+        if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
+            contexts.append(self._collect_ftrace_ctx(self.te.ftrace,
+                                                     experiment.out_dir))
 
-            # WORKLOAD: Run the configured workload
-            wload.run(out_dir=experiment.out_dir, cgroup=self._cgroup)
+        if self._target_conf_flag(tc, 'freeze_userspace'):
+            if 'cgroups' not in self.target.modules:
+                raise RuntimeError(
+                    'Failed to freeze userspace. Ensure "cgroups" module is '
+                    'listed among modules in target/test configuration')
+            if not any(s.name == 'freezer'
+                       for s in self.target.cgroups.list_subsystems()):
+                self._log.warning('No freezer cgroup controller on target. '
+                                  'Not freezing userspace')
+            else:
+                contexts.append(self._freeze_userspace_ctx())
 
-            # ENERGY: collect measurements
-            if self.te.emeter:
-                self.te.emeter.report(experiment.out_dir)
+        if self.te.emeter:
+            contexts.append(self._collect_energy_ctx(self.te.emeter,
+                                                     experiment.out_dir))
 
-            # FTRACE: stop and collect measurements
-            if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
-                self.te.ftrace.stop()
+        ctx = contextlib.nested(*contexts)
+        wload.run(out_dir=experiment.out_dir, cgroup=self._cgroup, context=ctx)
 
-                trace_file = experiment.out_dir + '/trace.dat'
-                self.te.ftrace.get_trace(trace_file)
-                self._log.info('Collected FTrace binary trace:')
-                self._log.info('   %s',
-                            trace_file.replace(self.te.res_dir, '<res_dir>'))
-
-                stats_file = experiment.out_dir + '/trace_stat.json'
-                self.te.ftrace.get_stats(stats_file)
-                self._log.info('Collected FTrace function profiling:')
-                self._log.info('   %s',
-                            stats_file.replace(self.te.res_dir, '<res_dir>'))
-
-            self._print_footer()
+        self._print_footer()
 
 ################################################################################
 # Utility Functions
