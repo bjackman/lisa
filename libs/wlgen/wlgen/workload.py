@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from contextlib import contextmanager
 import fileinput
 import json
 import os
@@ -22,6 +23,10 @@ import re
 from time import sleep
 
 import logging
+
+@contextmanager
+def null_context():
+    yield
 
 class Workload(object):
     """
@@ -180,7 +185,8 @@ class Workload(object):
             out_dir='./',
             as_root=False,
             start_pause_s=None,
-            end_pause_s=None):
+            end_pause_s=None,
+            context=None):
         """
         This method starts the execution of the workload. If the user provides
         an ftrace object, the method will also collect a trace.
@@ -222,6 +228,10 @@ class Workload(object):
                             stopped after this wait time.
         :type end_pause_s: float
         """
+        if context:
+            if ftrace or background:
+                raise ValueError(
+                    'Cannot use `context` alongside `ftrace` or `background`')
 
         self.cgroup = cgroup
 
@@ -270,7 +280,9 @@ class Workload(object):
             self._log.info('Workload execution START:')
             self._log.info('   %s', _command)
             # Run command and wait for it to complete
-            results = self.target.execute(_command, as_root=as_root)
+            results = None
+            with context or null_context():
+                results = self.target.execute(_command, as_root=as_root)
             self.output['executor'] = results
 
         # Wait `end_pause` seconds before stopping ftrace
