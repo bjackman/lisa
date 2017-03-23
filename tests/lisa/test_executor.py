@@ -36,37 +36,6 @@ LisaLogging.setup(level=logging.DEBUG)
 class BrokenManagerException(Exception):
     pass
 
-# class TestNestedContexts(TestCase):
-#     @classmethod
-#     def setUpClass(cls):
-#         cls._log = logging.getLogger('TestExecutor')
-
-#     @classmethod
-#     @contextmanager
-#     def broken_enter_context(cls, identifier):
-#         cls._log.debug('entering context with broken __enter__ [{}]'.format(identifier))
-#         raise BrokenManagerException(
-#             'INJECTED FAILURE IN __enter__ [{}]'.format(identifier))
-
-#     @classmethod
-#     @contextmanager
-#     def broken_exit_context(cls, identifier):
-#         cls._log.debug('entering context with broken __exit__ [{}]'.format(identifier))
-#         yield
-#         raise BrokenManagerException(
-#             'INJECTED FAILURE IN __exit__ [{}]'.format(identifier))
-
-#     @classmethod
-#     @contextmanager
-#     def good_context(cls, identifier):
-#         cls._log.debug('entering good context [{}]'.format(identifier))
-#         yield
-#         cls._log.debug('exiting good context [{}]'.format(identifier))
-
-#     def test_not_nested(self):
-#         with self.good_context(1) as c:
-#             self._log.debug(c)
-
 class SetUpTarget(TestCase):
     @classmethod
     def setUpClass(cls):
