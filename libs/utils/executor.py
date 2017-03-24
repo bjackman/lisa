@@ -40,6 +40,8 @@ from devlib import TargetError
 Experiment = namedtuple('Experiment', ['wload_name', 'wload',
                                        'conf', 'iteration', 'out_dir'])
 
+import contextlib
+
 class Executor():
     """
     Abstraction for running sets of experiments and gathering data from targets
@@ -188,6 +190,7 @@ class Executor():
         # Initialize globals
         self._default_cgroup = None
         self._cgroup = None
+        self._old_selinux_mode = None
 
         # Setup logging
         self._log = logging.getLogger('Executor')
@@ -329,24 +332,30 @@ class Executor():
         self._log.debug('Setup RT-App run folder [%s]...', self.te.run_dir)
         self.target.execute('[ -d {0} ] || mkdir {0}'\
                 .format(self.te.run_dir))
-        self.target.execute(
+
+        if self.target.is_rooted:
+            self.target.execute(
                 'grep schedtest /proc/mounts || '\
                 '  mount -t tmpfs -o size=1024m {} {}'\
                 .format('schedtest', self.te.run_dir),
                 as_root=True)
-        # tmpfs mounts have an SELinux context with "tmpfs" as the type (while
-        # other files we create have "shell_data_file"). That prevents non-root
-        # users from creating files in tmpfs mounts. For now, just put SELinux
-        # in permissive mode to get around that.
-        try:
-            # First, save the old SELinux mode
-            self._old_selinux_mode = self.target.execute('getenforce')
-        except TargetError:
-            # Probably the target doesn't have SELinux. No problem.
-            self._old_selinux_mode = None
+
+            # tmpfs mounts have an SELinux context with "tmpfs" as the type
+            # (while other files we create have "shell_data_file"). That
+            # prevents non-root users from creating files in tmpfs mounts. For
+            # now, just put SELinux in permissive mode to get around that.
+            try:
+                # First, save the old SELinux mode
+                self._old_selinux_mode = self.target.execute('getenforce')
+            except TargetError:
+                # Probably the target doesn't have SELinux. No problem.
+                pass
+            else:
+
+                self._log.warning('Setting target SELinux in permissive mode')
+                self.target.execute('setenforce 0', as_root=True)
         else:
-            self._log.warning('Setting target SELinux in permissive mode')
-            self.target.execute('setenforce 0', as_root=True)
+            self._log.warning('Not mounting tempfs because no root')
 
     def _setup_cpufreq(self, tc):
         if 'cpufreq' not in tc:
@@ -704,6 +713,46 @@ class Executor():
 
         return wload, test_dir
 
+    @contextlib.contextmanager
+    def _collect_ftrace_ctx(self, ftrace, out_dir):
+        self._log.warning('FTrace events collection enabled')
+        ftrace.start()
+        try:
+            yield
+        finally:
+            ftrace.stop()
+
+            trace_file = out_dir + '/trace.dat'
+            ftrace.get_trace(trace_file)
+            self._log.info('Collected FTrace binary trace:')
+            self._log.info('   %s',
+                        trace_file.replace(self.te.res_dir, '<res_dir>'))
+
+            stats_file = out_dir + '/trace_stat.json'
+            ftrace.get_stats(stats_file)
+            self._log.info('Collected FTrace function profiling:')
+            self._log.info('   %s',
+                           stats_file.replace(self.te.res_dir, '<res_dir>'))
+
+    @contextlib.contextmanager
+    def _freeze_userspace_ctx(self):
+        exclude = self.critical_tasks[self.te.target.os]
+        self._log.info('Freezing all tasks except: %s', ','.join(exclude))
+        self.te.target.cgroups.freeze(exclude)
+        try:
+            yield
+        finally:
+            self._log.info('Un-freezing userspace tasks')
+            self.te.target.cgroups.freeze(thaw=True)
+
+    @contextlib.contextmanager
+    def _collect_energy_ctx(self, emeter, out_dir):
+        emeter.reset()
+        try:
+            yield
+        finally:
+            emeter.report(out_dir)
+
     def _wload_run(self, exp_idx, experiment):
         tc = experiment.conf
         wload = experiment.wload
@@ -718,69 +767,32 @@ class Executor():
         self._log.debug('out_dir set to [%s]', experiment.out_dir)
         os.system('mkdir -p ' + experiment.out_dir)
 
-        # Freeze all userspace tasks that we don't need for running tests
-        need_thaw = False
+        contexts = []
+
+        if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
+            contexts.append(self._collect_ftrace_ctx(self.te.ftrace,
+                                                     experiment.out_dir))
+
         if self._target_conf_flag(tc, 'freeze_userspace'):
-            need_thaw = self._freeze_userspace()
+            if 'cgroups' not in self.target.modules:
+                raise RuntimeError(
+                    'Failed to freeze userspace. Ensure "cgroups" module is '
+                    'listed among modules in target/test configuration')
+            if not any(s.name == 'freezer'
+                       for s in self.target.cgroups.list_subsystems()):
+                self._log.warning('No freezer cgroup controller on target. '
+                                  'Not freezing userspace')
+            else:
+                contexts.append(self._freeze_userspace_ctx())
 
-        # FTRACE: start (if a configuration has been provided)
-        if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
-            self._log.warning('FTrace events collection enabled')
-            self.te.ftrace.start()
-
-        # ENERGY: start sampling
         if self.te.emeter:
-            self.te.emeter.reset()
+            contexts.append(self._collect_energy_ctx(self.te.emeter,
+                                                     experiment.out_dir))
 
-        # WORKLOAD: Run the configured workload
-        wload.run(out_dir=experiment.out_dir, cgroup=self._cgroup)
-
-        # ENERGY: collect measurements
-        if self.te.emeter:
-            self.te.emeter.report(experiment.out_dir)
-
-        # FTRACE: stop and collect measurements
-        if self.te.ftrace and self._target_conf_flag(tc, 'ftrace'):
-            self.te.ftrace.stop()
-
-            trace_file = experiment.out_dir + '/trace.dat'
-            self.te.ftrace.get_trace(trace_file)
-            self._log.info('Collected FTrace binary trace:')
-            self._log.info('   %s',
-                           trace_file.replace(self.te.res_dir, '<res_dir>'))
-
-            stats_file = experiment.out_dir + '/trace_stat.json'
-            self.te.ftrace.get_stats(stats_file)
-            self._log.info('Collected FTrace function profiling:')
-            self._log.info('   %s',
-                           stats_file.replace(self.te.res_dir, '<res_dir>'))
-
-        # Unfreeze the tasks we froze
-        if need_thaw:
-            self._thaw_userspace()
+        ctx = contextlib.nested(*contexts)
+        wload.run(out_dir=experiment.out_dir, cgroup=self._cgroup, context=ctx)
 
         self._print_footer()
-
-    def _freeze_userspace(self):
-        if 'cgroups' not in self.target.modules:
-            raise RuntimeError(
-                'Failed to freeze userspace. Ensure "cgroups" module is listed '
-                'among modules in target/test configuration')
-        controllers = [s.name for s in self.target.cgroups.list_subsystems()]
-        if 'freezer' not in controllers:
-            self._log.warning('No freezer cgroup controller on target. '
-                              'Not freezing userspace')
-            return False
-
-        exclude = self.critical_tasks[self.te.target.os]
-        self._log.info('Freezing all tasks except: %s', ','.join(exclude))
-        self.te.target.cgroups.freeze(exclude)
-        return True
-
-
-    def _thaw_userspace(self):
-        self._log.info('Un-freezing userspace tasks')
-        self.te.target.cgroups.freeze(thaw=True)
 
 ################################################################################
 # Utility Functions
