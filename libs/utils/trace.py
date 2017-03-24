@@ -519,14 +519,19 @@ class Trace(object):
 ###############################################################################
 # Trace Events Sanitize Methods
 ###############################################################################
+    @staticmethod
+    def _is_big_little(platform):
+        return ('big' in platform['clusters']
+                and 'little' in platform['clusters'])
 
     def _sanitize_SchedCpuCapacity(self):
         """
         Add more columns to cpu_capacity data frame if the energy model is
-        available.
+        available and the platform is big.LITTLE.
         """
         if not self.hasEvents('cpu_capacity') \
-           or 'nrg_model' not in self.platform:
+           or 'nrg_model' not in self.platform \
+           or not self._is_big_little(self.platform):
             return
 
         df = self._dfg_trace_event('cpu_capacity')
@@ -569,6 +574,10 @@ class Trace(object):
             df.rename(columns={'avg_period': 'period_contrib'}, inplace=True)
             df.rename(columns={'runnable_avg_sum': 'load_sum'}, inplace=True)
             df.rename(columns={'running_avg_sum': 'util_sum'}, inplace=True)
+
+        if not self._is_big_little(self.platform):
+            return
+
         df['cluster'] = np.select(
                 [df.cpu.isin(self.platform['clusters']['little'])],
                 ['LITTLE'], 'big')
@@ -617,7 +626,8 @@ class Trace(object):
         Also convert between existing field name formats for sched_energy_diff
         """
         if not self.hasEvents('sched_energy_diff') \
-           or 'nrg_model' not in self.platform:
+           or 'nrg_model' not in self.platform \
+           or not self._is_big_little(self.platform):
             return
         nrg_model = self.platform['nrg_model']
         em_lcluster = nrg_model['little']['cluster']
