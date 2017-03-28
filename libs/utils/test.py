@@ -56,6 +56,11 @@ class LisaTest(unittest.TestCase):
     experiments_conf = None
     """Override this with a dictionary or JSON path to configure the Executor"""
 
+    permitted_fail_prop = 0
+    """Proportion of tests that are permitted to fail, when a test is run with
+    multiple iterations
+    """
+
     @classmethod
     def _getTestConf(cls):
         if cls.test_conf is None:
@@ -213,16 +218,30 @@ def experiment_test(wrapped_test, instance, args, kwargs):
     The method will be passed the experiment object and a list of the names of
     tasks that were run as the experiment's workload.
     """
+    results = {}
     for experiment in instance.executor.experiments:
         tasks = experiment.wload.tasks.keys()
+        tag = '{}_{}'.format(experiment.wload_name, experiment.conf)
+        results[tag] = results.get(tag, [])
         try:
             wrapped_test(experiment, tasks, *args, **kwargs)
         except AssertionError as e:
             trace_relpath = os.path.join(experiment.out_dir, "trace.dat")
-            add_msg = "\n\tCheck trace file: " + os.path.abspath(trace_relpath)
-            orig_msg = e.args[0] if len(e.args) else ""
-            e.args = (orig_msg + add_msg,) + e.args[1:]
-            raise
+            add_msg = "Check trace file: " + os.path.abspath(trace_relpath)
+            results[tag].append(str(e) + "\n\t" +  add_msg)
+        else:
+            results[tag].append(None)
+
+    for tag, tag_results in results.iteritems():
+        fails = [r for r in tag_results if r is not None]
+        fail_prop= float(len(fails)) / len(tag_results)
+        if fail_prop > instance.permitted_fail_prop:
+            raise AssertionError("{} failures from {} iterations:\n{}".format(
+                len(fails), len(tag_results), '\n'.join(fails)))
+        elif fail_prop:
+            instance._log.info(
+                "Permitting {} failures of {}, fail_prop={:4d}".format(
+                    len(fails), wrapped_test, fail_prop))
 
 # Prevent nosetests from running experiment_test directly as a test case
 experiment_test.__test__ = False
