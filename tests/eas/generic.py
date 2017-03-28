@@ -92,7 +92,8 @@ class _EnergyModelTest(LisaTest):
 
         return {
             'wloads' : cls.workloads,
-            'confs' : [energy_aware_conf]
+            'confs' : [energy_aware_conf],
+            'iterations' : 3
         }
 
     @classmethod
