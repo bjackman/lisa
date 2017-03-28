@@ -650,11 +650,12 @@ class Trace(object):
             ['< 150', '< 400', '< 600'], '>= 600')
 
         # Tag columns by nrg_payoff
-        ccol = df.nrg_payoff
-        df['nrg_payoff_group'] = np.select(
-            [ccol > 2e9, ccol > 0, ccol > -2e9],
-            ['Optimal Accept', 'SchedTune Accept', 'SchedTune Reject'],
-            'Suboptimal Reject')
+        if 'nrg_payoff' in df:
+            ccol = df.nrg_payoff
+            df['nrg_payoff_group'] = np.select(
+                [ccol > 2e9, ccol > 0, ccol > -2e9],
+                ['Optimal Accept', 'SchedTune Accept', 'SchedTune Reject'],
+                'Suboptimal Reject')
 
     def _sanitize_SchedOverutilized(self):
         """ Add a column with overutilized status duration. """
