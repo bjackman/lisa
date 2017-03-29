@@ -92,7 +92,13 @@ class _EnergyModelTest(LisaTest):
         if 'cpufreq' in test_env.target.modules:
             available_govs = test_env.target.cpufreq.list_governors(0)
             if 'schedutil' in available_govs:
-                conf['cpufreq'] = {'governor' : 'schedutil'}
+                conf['cpufreq'] = {
+                    'governor' : 'schedutil',
+                    'params' : {
+                        'up_rate_limit_us': 0,
+                        'down_rate_limit_us': 0
+                    }
+                }
             elif 'sched' in available_govs:
                 conf['cpufreq'] = {'governor' : 'sched'}
 
