@@ -33,6 +33,9 @@ energy_aware_conf = {
     "tag" : "energy_aware",
     "flags" : ["ftrace", "freeze_userspace"],
     "sched_features" : "ENERGY_AWARE",
+    "cpufreq" : {
+        "governor" : "schedutil",
+    },
 }
 
 WORKLOAD_PERIOD_MS =  10
@@ -61,9 +64,6 @@ class _EnergyModelTest(LisaTest):
             ],
         },
         "modules": ["cgroups"],
-        "cpufreq" : {
-            "governor" : "sched",
-        },
     }
 
     negative_slack_allowed_pct = 15
