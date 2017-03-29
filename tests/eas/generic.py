@@ -60,7 +60,8 @@ class _EnergyModelTest(LisaTest):
                 "sched_load_avg_task",
                 "sched_load_avg_cpu",
                 "sched_migrate_task",
-                "sched_switch"
+                "sched_switch",
+                "cpu_frequency"
             ],
         },
         "modules": ["cgroups"],
