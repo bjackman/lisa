@@ -16,6 +16,7 @@
 #
 
 from math import isnan
+import os
 
 import numpy as np
 import pandas as pd
@@ -104,8 +105,10 @@ class _EnergyModelTest(LisaTest):
 
         return {
             'wloads' : cls.workloads,
-            'confs' : [conf],
-            'iterations' : 3
+        'confs' : [conf],
+            # Evil undocumented hack to get around lack of command-line
+            # parameters for lisa-test
+            'iterations' : os.getenv('LISA_GENERIC_NR_ITERATIONS', 1)
         }
 
     @classmethod
