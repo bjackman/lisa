@@ -184,47 +184,17 @@ class RTA(Workload):
             for line in self.output['executor'].split('\n'):
                 ofile.write(line+'\n')
 
-    def _getFirstBiggest(self, cpus):
-        # Non big.LITTLE system:
-        if 'bl' not in self.target.modules:
-            # return the first CPU of the last cluster
-            platform = self.target.platform
-            cluster_last = list(set(platform.core_clusters))[-1]
-            cluster_cpus = [cpu_id
-                    for cpu_id, cluster_id in enumerate(platform.core_clusters)
-                                           if cluster_id == cluster_last]
-            # If CPUs have been specified': return the fist in the last cluster
-            if cpus:
-                for cpu_id in cpus:
-                    if cpu_id in cluster_cpus:
-                        return cpu_id
-            # Otherwise just return the first cpu of the last cluster
-            return cluster_cpus[0]
-
-        # big.LITTLE system:
-        for c in cpus:
-             if c not in self.target.bl.bigs:
-                continue
-             return c
-        # Only LITTLE CPUs, thus:
-        #  return the first possible cpu
-        return cpus[0]
 
     def _getFirstBig(self, cpus=None):
-        # Non big.LITTLE system:
-        if 'bl' not in self.target.modules:
-            return self._getFirstBiggest(cpus)
-        if cpus:
-            for c in cpus:
-                if c not in self.target.bl.bigs:
-                    continue
-                return c
-        # Only LITTLE CPUs, thus:
-        #  return the first big core of the system
-        if self.target.big_core:
-            # Big.LITTLE system
-            return self.target.bl.bigs[0]
-        return 0
+        cpus = cpus or range(self.target.number_of_cpus)
+
+        if 'bl'in self.target.modules:
+            cluster = self.target.bl.bigs
+            candidates = sorted(set(self.target.bl.bigs).intersection(cpus))
+            if candidates:
+                return cadidates[0]
+
+        return cpus[0]
 
     def _getFirstLittle(self, cpus=None):
         # Non big.LITTLE system:
@@ -274,7 +244,7 @@ class RTA(Workload):
             target_cpu = self._getFirstBig()
             self._log.debug('ref on cpu: %d', target_cpu)
         else:
-            target_cpu = self._getFirstBiggest(self.cpus)
+            target_cpu = self._getFirstBig(self.cpus)
             self._log.debug('ref on (possible) biggest cpu: %d', target_cpu)
         return target_cpu
 
