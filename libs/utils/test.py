@@ -141,11 +141,12 @@ class LisaTest(unittest.TestCase):
                                 self.te.topology,
                                 [t for t in tasks if task_filter in t])
 
-    def get_trace(self, experiment):
+    def get_trace(self, experiment, normalize_time=True):
         if not hasattr(self, "__traces"):
             self.__traces = {}
-        if experiment.out_dir in self.__traces:
-            return self.__traces[experiment.out_dir]
+        memo_key = (experiment.out_dir, normalize_time)
+        if memo_key in self.__traces:
+            return self.__traces[memo_key]
 
         if ('ftrace' not in experiment.conf['flags']
             or 'ftrace' not in self.test_conf):
@@ -155,9 +156,10 @@ class LisaTest(unittest.TestCase):
 
         events = self.test_conf['ftrace']['events']
         tasks = experiment.wload.tasks.keys()
-        trace = Trace(self.te.platform, experiment.out_dir, events, tasks)
+        trace = Trace(self.te.platform, experiment.out_dir, events, tasks,
+                      normalize_time=normalize_time)
 
-        self.__traces[experiment.out_dir] = trace
+        self.__traces[memo_key] = trace
         return trace
 
     def get_start_time(self, experiment):
