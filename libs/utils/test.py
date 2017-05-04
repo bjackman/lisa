@@ -142,6 +142,13 @@ class LisaTest(unittest.TestCase):
                                 [t for t in tasks if task_filter in t])
 
     def get_trace(self, experiment, normalize_time=True):
+        """
+        Get a :class:`Trace` for the experiment, including all the enabled events
+
+        :param experiment: :class:`Experiment` to get trace for
+        :param normalize_time: See :class:`Trace` parameters
+        """
+
         if not hasattr(self, "__traces"):
             self.__traces = {}
         memo_key = (experiment.out_dir, normalize_time)
