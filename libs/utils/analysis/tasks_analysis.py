@@ -215,7 +215,7 @@ class TasksAnalysis(AnalysisModule):
         :param tasks: the list of task names and/or PIDs to plot.
                       Numerical PIDs and string task names can be mixed
                       in the same list.
-        :type tasks: list(str) or list(int)
+        :type tasks: str, list(str), int or list(int)
 
         :param signals: list of signals (and thus plots) to generate
                         default: all the plots and signals available in the
@@ -236,6 +236,7 @@ class TasksAnalysis(AnalysisModule):
 
         # Defined list of tasks to plot
         if tasks and \
+            not isinstance(tasks, int) and \
             not isinstance(tasks, str) and \
             not isinstance(tasks, list):
             raise ValueError('Wrong format for tasks parameter')
