@@ -199,20 +199,17 @@ class TestSchedutilTunables(BasicCheckTest):
             raise SkipTest('schedutil not present on target')
         self.target.cpufreq.set_all_governors('schedutil')
 
-        cpus = set(range(self.target.number_of_cpus))
         fail_cpus = []
 
-        while cpus:
-            cpu = iter(cpus).next()
-            domain = tuple(self.target.cpufreq.get_domain_cpus(cpu))
+        for domain in self.target.cpufreq.iter_domains():
+            print domain
+            cpu = domain[0]
 
             tunables = self.target.cpufreq.get_governor_tunables(cpu)
             for name, value in tunables.iteritems():
                 if name.endswith('rate_limit_us'):
                     if value > self.MAX_RATE_LIMIT_US:
                         fail_cpus += domain
-
-            cpus = cpus.difference(domain)
 
         self.assertTrue(
             fail_cpus == [],
