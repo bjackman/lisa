@@ -149,7 +149,7 @@ class TestWorkloadDuration(SetUpTarget):
 
         DURATION = 3
 
-        wlspec['duration'] = DURATION
+        wlspec['conf']['duration'] = DURATION
 
         self._log.debug(wlspec)
 
