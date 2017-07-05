@@ -296,14 +296,17 @@ class FrequencyAnalysis(AnalysisModule):
             axes.axhline(_avg, color='r', linestyle='--', linewidth=2)
 
             # Set plot limit based on CPU min/max frequencies
-            for cluster,cpus in self._platform['clusters'].iteritems():
-                if cpu_id not in cpus:
-                    continue
-                axes.set_ylim(
-                        (self._platform['freqs'][cluster][0] - 100000)/1e3,
-                        (self._platform['freqs'][cluster][-1] + 100000)/1e3
-                )
-                break
+            if 'clusters' in self._platform:
+                for cluster,cpus in self._platform['clusters'].iteritems():
+                    if cpu_id not in cpus:
+                        continue
+                    freqs = self._platform['freqs'][cluster]
+                    break
+            else:
+                freqs = df['frequency'].unique()
+
+            axes.set_ylim((min(freqs) - 100000) / 1e3,
+                          (max(freqs) + 100000) / 1e3)
 
             # Plot CPU frequency transitions
             _df['frequency'].plot(style=['r-'], ax=axes,
