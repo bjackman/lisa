@@ -82,17 +82,15 @@ class CpusAnalysis(AnalysisModule):
 
         # Filter on specified cpus
         if cpus is None:
-            cpus = sorted(self._platform['clusters']['little'] +
-                          self._platform['clusters']['big'])
-        cpus = listify(cpus)
+            cpus = sorted(self._big_cpus + self._little_cpus)
 
         # Plot: big CPUs
-        bcpus = set(cpus) & set(self._platform['clusters']['big'])
+        bcpus = set(cpus).intersection(self._big_cpus)
         if bcpus:
             self._plotCPU(bcpus, "big")
 
         # Plot: LITTLE CPUs
-        lcpus = set(cpus) & set(self._platform['clusters']['little'])
+        lcpus = set(cpus).intersection(self._little_cpus)
         if lcpus:
             self._plotCPU(lcpus, "LITTLE")
 
