@@ -214,6 +214,48 @@ class TasksAnalysis(AnalysisModule):
 
         return wk.ffill().cpu
 
+    def _dfg_task_runnable(self):
+        """
+        Get a DataFrame showing when tasks were RUNNABLE
+
+        Each column in this DataFrame, labeled by PID, is a signal which is 1.0
+        when the task was runnable (including when it was running), and 0.0 when
+        it was not.
+        """
+        if not (self._trace.hasEvents('sched_wakeup') and
+                self._trace.hasEvents('sched_switch')):
+            self._log.warning(
+                'Events [sched_wakeup, sched_switch] not found')
+            return None
+
+        # sched_wakeup tells us when a task becomes runnable.
+        # Make a DataFrame with a column per PID with 1s where the PID became
+        # runnable.
+        wk = self._trace.data_frame.trace_event('sched_wakeup')
+        wk = (wk[wk.success == 1][['target_cpu', 'pid']]
+              .pivot(columns='pid')
+              .target_cpu)
+        wk[~wk.isnull()] = 1
+
+        # When a task switches out and prev_state is not 0 (TASK_RUNNING),
+        # sched_switch tells us a task is no longer runnable.
+        # Make a DataFrame with a column per PID with 0s where the PID stopped
+        # being runnable.
+        sw = self._trace.data_frame.trace_event('sched_switch')
+        sw = (sw[sw.prev_state != 0][['prev_pid', '__cpu']]
+              .rename(columns={'target_cpu': 'cpu'})
+              .pivot(columns='prev_pid'))['__cpu']
+        sw[~sw.isnull()] = 0
+
+        # Get the "union" of the two DataFrames
+        # TODO: Use __line to determine who overwrites who?
+        index = wk.index.append(sw.index).sort_values()
+        df = wk.reindex(index)
+        df[df.isnull()] = sw
+
+        return df.ffill()
+
+
 ###############################################################################
 # Plotting Methods
 ###############################################################################
