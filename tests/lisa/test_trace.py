@@ -17,6 +17,7 @@
 
 import json
 import os
+import pandas as pd
 from unittest import TestCase
 
 from trace import Trace
@@ -37,13 +38,22 @@ def sched_switch(timestamp, cpu,
             "prev_comm={prev_comm} prev_pid={prev_pid} prev_prio=120 prev_state={prev_state} "
             "next_comm={next_comm} next_pid={next_pid} next_prio=120").format(**locals())
 
+def sched_wakeup(timestamp, _cpu, comm, pid, target_cpu):
+    return (_event_common('<idle>', 0, _cpu, timestamp) + "sched_wakeup: "
+            "comm={comm} pid={pid} prio=100 success=1 target_cpu={target_cpu}"
+            .format(**locals()))
+
+def sched_migrate_task(timestamp, comm, pid, orig_cpu, dest_cpu):
+    return (_event_common("<idle>", 0, 0, timestamp) + "sched_migrate_task: "
+            "comm={comm} pid={pid} prio=100 orig_cpu={orig_cpu} dest_cpu={dest_cpu}"
+            .format(**locals()))
 
 class TestTrace(TestCase):
     """Smoke tests for LISA's Trace class"""
 
     traces_dir = os.path.join(os.path.dirname(__file__), 'traces')
     events = [
-        'sched_switch',
+        'sched_switch', 'sched_wakeup', 'sched_migrate_task'
     ]
 
     def __init__(self, *args, **kwargs):
@@ -95,3 +105,35 @@ class TestTrace(TestCase):
         self.assertEqual(trace.getTaskByName('father'), [1234])
 
         os.remove(self.test_trace)
+
+    def test_dfg_task_cpu_single_task(self):
+        """Test the task_cpu DataFrame getter for one task"""
+
+        comm = 'mytask'
+        pid = 100
+
+        in_data = '\n'.join([
+            # Task wakes up on cpu 0
+            sched_wakeup('0.1', 0, comm, pid, 0),
+            # Then gets migrated to CPU 1
+            sched_migrate_task('0.2', comm, pid, 0, 1),
+            # Then to CPU 2
+            sched_migrate_task('0.3', comm, pid, 1, 2),
+            # Then wakes up on cpu 2
+            sched_wakeup('0.4', 0, comm, pid, 2),
+            # And is immediately migrated back to 0 (same timestamp!)
+            sched_migrate_task('0.4', comm, pid, 2, 0),
+            # Then wakes up on cpu 2 again
+            sched_wakeup('0.5', 0, comm, pid, 2),
+            # And is then migrated back to 0 again (different timestamp)
+            sched_migrate_task('0.6', comm, pid, 2, 0),
+        ]) + '\n' # Final newline is required!
+
+        with open(self.test_trace, "w") as fout:
+            fout.write(in_data)
+        trace = Trace(self.platform, self.test_trace, self.events,
+                      normalize_time=False)
+
+        df = trace.data_frame.task_cpu()[pid].astype(int)
+        self.assertTrue(df.equals(pd.Series([0, 1, 2, 0, 2, 0],
+                                            index=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6])))
