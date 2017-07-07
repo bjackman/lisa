@@ -182,6 +182,37 @@ class TasksAnalysis(AnalysisModule):
 
         return rt_tasks
 
+    def _dfg_task_cpu(self):
+        """
+        Get a DatFrame showing which CPU a task was attached to
+
+        Each column in this DataFrame, labeled by PID, is a signal which
+        indicates which CPU's runqueue a task was attached to. This does not
+        imply it was _running_ on that CPU.
+        """
+        if not (self._trace.hasEvents('sched_wakeup') and
+                self._trace.hasEvents('sched_migrate_task')):
+            self._log.warning(
+                'Events [sched_wakeup, sched_migrate_task] not found')
+            return None
+
+        wk = self._trace.data_frame.trace_event('sched_wakeup')
+        wk = (wk[wk.success == 1][['target_cpu', 'pid']]
+              .rename(columns={'target_cpu': 'cpu'})
+              .pivot(columns='pid'))
+
+        mg = self._trace.data_frame.trace_event('sched_migrate_task')
+        mg = (mg[['dest_cpu', 'pid']]
+              .rename(columns={'dest_cpu': 'cpu'})
+              .pivot(columns='pid'))
+
+        # Get the "union" of the two DataFrames
+        # TODO: sched_migrate_task should always beat sched_switch
+        index = wk.index.append(mg.index).sort_values()
+        df = wk.reindex(index)
+        wk[df.isnull()] = mg
+
+        return wk.ffill().cpu
 
 ###############################################################################
 # Plotting Methods
