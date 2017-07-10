@@ -262,6 +262,30 @@ class TasksAnalysis(AnalysisModule):
 
         return df.ffill()
 
+    def _dfg_cpu_nr_running(self):
+        """
+        Get a DataFrame showing the number of runnable tasks on a CPU
+
+        The returned DataFrame has a column for each CPU, which is a signal
+        showing the number of runnable tasks on that CPU.
+        """
+        tc = self._trace.data_frame.task_cpu()
+        tr = self._trace.data_frame.task_runnable()
+
+        index = tc.index.append(tr.index).sort_values()
+        tc = tc.reindex(index, method='ffill')
+        tr = tr.reindex(index, method='ffill')
+
+        # task_cpu has CPU IDs, task_runnable has 0s and 1s. Add 1 to the CPU
+        # IDs before multiplying the two, then subtract 1 , so that the result
+        # has -1.0s where the task was blocked and the CPU ID where the task
+        # was running on a CPU or on its runqueue.
+        tcr = ((tc + 1) * tr) - 1
+
+        # For each row, count the number of instances of each CPU number - this
+        # is the number of runnable tasks on that CPU.
+        cpus = range(self.platform['cpus_count'])
+        pd.DataFrame({cpu: tcr[tcr == cpu].count(axis=1) for cpu in cpus})
 
 ###############################################################################
 # Plotting Methods
