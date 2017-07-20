@@ -182,6 +182,103 @@ class TasksAnalysis(AnalysisModule):
 
         return rt_tasks
 
+    def _dfg_task_cpu(self):
+        """
+        Get a DatFrame showing which CPU a task was attached to
+
+        Each column in this DataFrame, labeled by PID, is a signal which
+        indicates which CPU's runqueue a task was attached to. This does not
+        imply it was _running_ on that CPU.
+        """
+        if not (self._trace.hasEvents('sched_wakeup') and
+                self._trace.hasEvents('sched_migrate_task')):
+            self._log.warning(
+                'Events [sched_wakeup, sched_migrate_task] not found')
+            return None
+
+        wk = self._trace.data_frame.trace_event('sched_wakeup')
+        wk = (wk[wk.success == 1][['target_cpu', 'pid']]
+              .rename(columns={'target_cpu': 'cpu'})
+              .pivot(columns='pid'))
+
+        mg = self._trace.data_frame.trace_event('sched_migrate_task')
+        mg = (mg[['dest_cpu', 'pid']]
+              .rename(columns={'dest_cpu': 'cpu'})
+              .pivot(columns='pid'))
+
+        # Get the "union" of the two DataFrames
+        # TODO: sched_migrate_task should always beat sched_switch
+        index = wk.index.append(mg.index).sort_values()
+        df = wk.reindex(index)
+        wk[df.isnull()] = mg
+
+        return wk.ffill().cpu
+
+    def _dfg_task_runnable(self):
+        """
+        Get a DataFrame showing when tasks were RUNNABLE
+
+        Each column in this DataFrame, labeled by PID, is a signal which is 1.0
+        when the task was runnable (including when it was running), and 0.0 when
+        it was not.
+        """
+        if not (self._trace.hasEvents('sched_wakeup') and
+                self._trace.hasEvents('sched_switch')):
+            self._log.warning(
+                'Events [sched_wakeup, sched_switch] not found')
+            return None
+
+        # sched_wakeup tells us when a task becomes runnable.
+        # Make a DataFrame with a column per PID with 1s where the PID became
+        # runnable.
+        wk = self._trace.data_frame.trace_event('sched_wakeup')
+        wk = (wk[wk.success == 1][['target_cpu', 'pid']]
+              .pivot(columns='pid')
+              .target_cpu)
+        wk[~wk.isnull()] = 1
+
+        # When a task switches out and prev_state is not 0 (TASK_RUNNING),
+        # sched_switch tells us a task is no longer runnable.
+        # Make a DataFrame with a column per PID with 0s where the PID stopped
+        # being runnable.
+        sw = self._trace.data_frame.trace_event('sched_switch')
+        sw = (sw[sw.prev_state != 0][['prev_pid', '__cpu']]
+              .rename(columns={'target_cpu': 'cpu'})
+              .pivot(columns='prev_pid'))['__cpu']
+        sw[~sw.isnull()] = 0
+
+        # Get the "union" of the two DataFrames
+        # TODO: Use __line to determine who overwrites who?
+        index = wk.index.append(sw.index).sort_values()
+        df = wk.reindex(index)
+        df[df.isnull()] = sw
+
+        return df.ffill()
+
+    def _dfg_cpu_nr_running(self):
+        """
+        Get a DataFrame showing the number of runnable tasks on a CPU
+
+        The returned DataFrame has a column for each CPU, which is a signal
+        showing the number of runnable tasks on that CPU.
+        """
+        tc = self._trace.data_frame.task_cpu()
+        tr = self._trace.data_frame.task_runnable()
+
+        index = tc.index.append(tr.index).sort_values()
+        tc = tc.reindex(index, method='ffill')
+        tr = tr.reindex(index, method='ffill')
+
+        # task_cpu has CPU IDs, task_runnable has 0s and 1s. Add 1 to the CPU
+        # IDs before multiplying the two, then subtract 1 , so that the result
+        # has -1.0s where the task was blocked and the CPU ID where the task
+        # was running on a CPU or on its runqueue.
+        tcr = ((tc + 1) * tr) - 1
+
+        # For each row, count the number of instances of each CPU number - this
+        # is the number of runnable tasks on that CPU.
+        cpus = range(self.platform['cpus_count'])
+        pd.DataFrame({cpu: tcr[tcr == cpu].count(axis=1) for cpu in cpus})
 
 ###############################################################################
 # Plotting Methods
