@@ -46,7 +46,7 @@ class Workload(object):
                  custom_conf=None,
                  *args, **kwargs):
 
-        if custom_conf and profile_conf:
+        if custom_conf and profile:
             raise ValueError('Provide only one of custom_conf and profile_conf')
 
         # Target device confguration
