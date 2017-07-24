@@ -16,6 +16,7 @@
 #
 
 import json
+from numpy.testing import assert_array_equal
 import os
 import pandas as pd
 from unittest import TestCase
@@ -137,3 +138,32 @@ class TestTrace(TestCase):
         df = trace.data_frame.task_cpu()[pid].astype(int)
         self.assertTrue(df.equals(pd.Series([0, 1, 2, 0, 2, 0],
                                             index=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6])))
+
+    def test_dfg_task_cpu_no_wakeup(self):
+        """Test the task_cpu DataFrame getter for task without wake event"""
+
+        comm = 'mytask'
+        pid = 100
+
+        in_data = '\n'.join([
+            sched_wakeup('0.1', 0, comm, pid, 0),
+            # Task gets migrated to CPU 1
+            sched_migrate_task('0.1', comm, pid, 0, 1),
+            # Then to CPU 2
+            sched_migrate_task('0.2', comm, pid, 1, 2),
+            # Include an unrelated sched_wakeup event just so
+            # hasEvents('sched_wakeup') is True
+            sched_wakeup('0.5', 0, 'other', pid + 1, 0)
+        ]) + '\n' # Final newline is required!
+
+        with open(self.test_trace, "w") as fout:
+            fout.write(in_data)
+        trace = Trace(self.platform, self.test_trace, self.events,
+                      normalize_time=False)
+
+        df = trace.data_frame.task_cpu()[pid].astype(int)
+        df = df[df.shift() != df] # drop consecutive duplicates
+
+        assert_array_equal(df.values, [1, 2])
+        assert_array_equal(df.index,  [0.1, 0.2])
+
