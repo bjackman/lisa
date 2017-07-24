@@ -200,18 +200,19 @@ class TasksAnalysis(AnalysisModule):
         wk = self._trace.data_frame.trace_event('sched_wakeup')
         wk = (wk[wk.success == 1][['target_cpu', 'pid']]
               .rename(columns={'target_cpu': 'cpu'})
-              .pivot(columns='pid'))
+              .pivot(columns='pid').cpu)
 
         # mg will give us all the times where a task migrated to a CPU
         mg = self._trace.data_frame.trace_event('sched_migrate_task')
         mg = (mg[['dest_cpu', 'pid']]
               .rename(columns={'dest_cpu': 'cpu'})
-              .pivot(columns='pid'))
+              .pivot(columns='pid').cpu)
 
         # Get the "union" of the two DataFrames
         index = wk.index.append(mg.index).drop_duplicates().sort_values()
+        columns = sorted(set(wk.columns).union(mg.columns))
         # Expand mg to have NaNs at all the times where a task woke up
-        df = mg.reindex(index)
+        df = mg.reindex(index, columns)
         # Now fill all of those NaNs with values from wk.
         # Note that we fill mg's gaps using wk and not the other way
         # round. That's because when a wakeup and a migration happen with the
@@ -219,7 +220,7 @@ class TasksAnalysis(AnalysisModule):
         # (since it's traced later in the kernel's wakeup path).
         df = df.fillna(wk)
 
-        return df.ffill().cpu
+        return df.ffill()
 
     def _dfg_task_runnable(self):
         """

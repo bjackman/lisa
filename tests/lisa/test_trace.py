@@ -167,3 +167,27 @@ class TestTrace(TestCase):
         assert_array_equal(df.values, [1, 2])
         assert_array_equal(df.index,  [0.1, 0.2])
 
+    def test_dfg_task_cpu_no_migration(self):
+        """Test the task_cpu DataFrame getter for task without migrate event"""
+
+        comm = 'mytask'
+        pid = 100
+
+        in_data = '\n'.join([
+            # Task wakes up on CPU 0
+            sched_wakeup('0.1', 0, comm, pid, 0),
+            # Include an unrelated sched_migrate_task event just so
+            # hasEvents('sched_migrate_task') is True
+            sched_migrate_task('0.5', 'other', pid + 1, 0, 1),
+        ]) + '\n' # Final newline is required!
+
+        with open(self.test_trace, "w") as fout:
+            fout.write(in_data)
+        trace = Trace(self.platform, self.test_trace, self.events,
+                      normalize_time=False)
+
+        df = trace.data_frame.task_cpu()[pid].astype(int)
+        df = df[df.shift() != df] # drop consecutive duplicates
+
+        assert_array_equal(df.values, [0])
+        assert_array_equal(df.index,  [0.1])
