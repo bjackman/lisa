@@ -196,11 +196,23 @@ class TasksAnalysis(AnalysisModule):
                 'Events [sched_wakeup, sched_migrate_task] not found')
             return None
 
+        def get_wake_df(wake_event):
+            df = self._trace.data_frame.trace_event(wake_event)
+            return (df[df.success == 1][['target_cpu', 'pid']]
+                    .rename(columns={'target_cpu': 'cpu'})
+                    .pivot(columns='pid').cpu)
+
         # wk will give us all the times where a task was woken up onto a CPU
-        wk = self._trace.data_frame.trace_event('sched_wakeup')
-        wk = (wk[wk.success == 1][['target_cpu', 'pid']]
-              .rename(columns={'target_cpu': 'cpu'})
-              .pivot(columns='pid').cpu)
+        wk = get_wake_df('sched_wakeup')
+
+        # The first wakeup event for a task has a different name
+        # Add those different events in
+        if self._trace.hasEvents('sched_wakeup_new'):
+            wkn = get_wake_df('sched_wakeup_new')
+            index = wk.index.append(wkn.index).drop_duplicates().sort_values()
+            columns = sorted(set(wk.columns).union(wkn.columns))
+            wk = wk.reindex(index, columns)
+            wk = wk.fillna(wkn)
 
         # mg will give us all the times where a task migrated to a CPU
         mg = self._trace.data_frame.trace_event('sched_migrate_task')
