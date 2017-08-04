@@ -6,10 +6,10 @@
     },
     "tasks": {
         "barrier_task": {
-            "instance": 6,
-            "loop": 4,
-            "run": 200000,
-            "barrier": "my_barrier"
+            "instance": 8,
+            "loop": 8,
+            "run": 600000,
+            "pthread_barrier": "my_barrier"
         }
     }
 }

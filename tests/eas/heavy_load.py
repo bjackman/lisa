@@ -13,6 +13,8 @@
 # limitations under the License.
 #
 
+import os
+
 from bart.common.Utils import select_window
 
 from test import LisaTest, experiment_test
@@ -104,3 +106,45 @@ class HeavyLoadTest(LisaTest):
                 "Some CPUs were less than {}% utilized\n"
                 " CPU active proportions:\n{}".format(
                     REQUIRED_CPU_ACTIVE_TIME_PCT, proportions_str))
+
+class BarrierHeavyLoadTest(LisaTest):
+    """
+    todo
+    """
+
+    test_conf = {
+        'ftrace' : {
+            'events' : ['cpu_idle', 'sched_switch', 'sched_migrate_task',
+                        'sched_wakeup', 'sched_waking'],
+        },
+        'modules' : ['cgroups'], # Required by freeze_userspace flag
+    }
+
+    @classmethod
+    def _getExperimentsConf(cls, env):
+        return {
+            "wloads" : {
+                "n_heavy_tasks" : {
+                    "type" : "rt-app",
+                    "conf" : {
+                        "class" : "custom",
+                        "json": os.path.join(
+                            env.LISA_HOME, 'assets', 'barrier_throughput.json')
+                    },
+                },
+            },
+            "confs" : [{
+                'tag' : 'energy_aware',
+                'flags' : ['ftrace'],
+            }]
+        }
+
+    @classmethod
+    def setUpClass(cls, *args, **kwargs):
+        super(BarrierHeavyLoadTest, cls).runExperiments(*args, **kwargs)
+
+    @experiment_test
+    def test_tasks_spread(self, experiment, tasks):
+        trace = self.get_trace(experiment)
+
+        print trace.data_frame.nr_running()
