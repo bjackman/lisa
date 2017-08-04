@@ -1,0 +1,15 @@
+{
+    "global": {
+        "calibration": __PVALUE__,
+        "default_policy": "SCHED_OTHER",
+        "logdir": "__LOGDIR__"
+    },
+    "tasks": {
+        "barrier_task": {
+            "instance": 6,
+            "loop": 4,
+            "run": 200000,
+            "barrier": "my_barrier"
+        }
+    }
+}
