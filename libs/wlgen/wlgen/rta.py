@@ -489,7 +489,8 @@ class RTA(Workload):
         # Move configuration file to target
         self.target.push(self.json, self.run_dir)
 
-        self.rta_cmd  = self.target.executables_directory + '/rt-app'
+        # Use -K to avoid locking pages so we can run without root.
+        self.rta_cmd  = self.target.executables_directory + '/rt-app -K'
         self.rta_conf = self.run_dir + '/' + self.json
         self.command = '{0:s} {1:s} 2>&1'.format(self.rta_cmd, self.rta_conf)
 

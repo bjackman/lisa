@@ -38,7 +38,7 @@ class RTABase(WlgenSelfBase):
         """Return the rt-app command we should execute when `run` is called"""
         rta_path = os.path.join(self.target.executables_directory, 'rt-app')
         json_path = os.path.join(rta_wload.run_dir, rta_wload.json)
-        return '{} {} 2>&1'.format(rta_path, json_path)
+        return '{} -K {} 2>&1'.format(rta_path, json_path)
 
     def setUp(self):
         super(RTABase, self).setUp()
