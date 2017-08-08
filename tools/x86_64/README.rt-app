@@ -1,0 +1,20 @@
+rt-app built from:
+
+git@github.com:scheduler-tools/rt-app.git 1d1befc871
+
+Configured with:
+
+./autogen.sh
+./configure LDFLAGS=" --static -L/home/brendan/sources/json-c/." CFLAGS="-I/home/brendan/sources/ " --with-deadline
+
+----
+
+json-c built from:
+
+https://github.com/json-c/json-c 815778448348
+
+Configured  with:
+
+./autogen.sh
+./configure --host=arm-linux-gnueabihf --disable-shared --enable-static
+make
