@@ -178,7 +178,7 @@ class Workload(object):
             cpus=None,
             background=False,
             out_dir='./',
-            as_root=False,
+            as_root=True,
             start_pause_s=None,
             end_pause_s=None):
         """
