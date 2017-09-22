@@ -628,19 +628,6 @@ class Trace(object):
         self._log.debug('Overutilized time: %.6f [s] (%.3f%% of trace time)',
                         self.overutilized_time, self.overutilized_prc)
 
-    def _chunker(self, seq, size):
-        """
-        Given a data frame or a series, generate a sequence of chunks of the
-        given size.
-
-        :param seq: data to be split into chunks
-        :type seq: :mod:`pandas.Series` or :mod:`pandas.DataFrame`
-
-        :param size: size of each chunk
-        :type size: int
-        """
-        return (seq.iloc[pos:pos + size] for pos in range(0, len(seq), size))
-
     def _sanitize_CpuFrequency(self):
         """
         Verify that all platform reported clusters are frequency coherent (i.e.
@@ -710,16 +697,34 @@ class Trace(object):
             setattr(self.ftrace.cpu_frequency, 'data_frame', df)
 
         # Frequency Coherency Check
+        df = df.pivot(columns='cpu').frequency.ffill()
         for _, cpus in clusters.iteritems():
-            cluster_df = df[df.cpu.isin(cpus)]
-            for chunk in self._chunker(cluster_df, len(cpus)):
-                f = chunk.iloc[0].frequency
-                if any(chunk.frequency != f):
-                    self._log.warning('Cluster Frequency is not coherent! '
-                                      'Failure in [cpu_frequency] events at:')
-                    self._log.warning(chunk)
-                    self.freq_coherency = False
-                    return
+            cluster_df = df[cpus]
+
+            # Find where the cluster freq appeared incoherent
+            def row_has_incoherence(row):
+                return any(f != row.iloc[0] for f in row.iloc[1:])
+            _df = cluster_df.apply(row_has_incoherence, axis=1)
+
+            # Get only rows that differ from the previous row
+            _df = _df[_df != _df.shift()]
+
+            # Set up a column showing the time since the previous row
+            _df = _df.reset_index()
+            _df['len'] = _df['Time'] - _df['Time'].shift()
+
+            # [df[0] == False] tells us where we _exited_ a period of
+            # incoherency.
+            # Find moments where we exited after more than 5ms of incoherency.
+            _df = _df[_df[0] == False]
+            _df = _df[_df['len'] > 0.005]
+
+            if len(_df):
+                self._log.warning('Cluster Frequency is not coherent! '
+                                  'Failure in [cpu_frequency] events at {}:')
+                self._log.warning(_df)
+                self.freq_coherency = False
+                return
         self._log.info('Platform clusters verified to be Frequency coherent')
 
 ###############################################################################
