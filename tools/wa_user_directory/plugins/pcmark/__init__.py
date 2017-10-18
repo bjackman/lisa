@@ -84,6 +84,9 @@ class PcMark(Workload):
         self.target.execute('am start -n {}/{}'.format(self.package, self.activity))
         time.sleep(5)
 
+        # TODO: we clobber the old auto-rotation setting here.
+        self.target.set_auto_rotation(False)
+        self._saved_screen_rotation = self.target.get_rotation()
         # Move to benchmark run page
         self.target.set_left_rotation() # Needed to make TAB work
         self.target.execute('input keyevent KEYCODE_TAB')
@@ -130,6 +133,5 @@ class PcMark(Workload):
         self.target.execute('am force-stop {}'.format(self.package))
 
         self.monitor.stop()
-        # TODO: can we read and restore the previous orientation?
-        self.target.screen.set_orientation(auto=True);
+        self.target.set_rotation(int(self._saved_screen_rotation))
 
